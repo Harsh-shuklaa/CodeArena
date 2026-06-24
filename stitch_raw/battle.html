@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CODEARENA | Battle Arena</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=JetBrains+Mono:wght@500;700&amp;family=Sora:wght@700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;family=Sora:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        
+        body {
+            background-color: #0e0e13;
+            background-image: linear-gradient(#1A1A20 1px, transparent 1px), linear-gradient(90deg, #1A1A20 1px, transparent 1px);
+            background-size: 40px 40px;
+            overflow: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(19, 19, 24, 0.7);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .neon-border-purple {
+            border-image: linear-gradient(to right, #ddb7ff, transparent) 1;
+        }
+
+        .neon-border-cyan {
+            border-image: linear-gradient(to left, #4cd7f6, transparent) 1;
+        }
+
+        .scanning-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #ddb7ff, transparent);
+            animation: scan 3s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0; opacity: 0; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+
+        .pulse-glow {
+            animation: glow-pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes glow-pulse {
+            0%, 100% { filter: drop-shadow(0 0 5px rgba(221, 183, 255, 0.3)); }
+            50% { filter: drop-shadow(0 0 15px rgba(221, 183, 255, 0.6)); }
+        }
+
+        .progress-pulse::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: progress-slide 2s infinite;
+        }
+
+        @keyframes progress-slide {
+            100% { left: 150%; }
+        }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #35343a; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4d4354; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary-fixed-dim": "#4cd7f6",
+                      "inverse-on-surface": "#303035",
+                      "on-tertiary-fixed": "#001a42",
+                      "inverse-surface": "#e4e1e9",
+                      "surface-container-high": "#2a292f",
+                      "surface-tint": "#ddb7ff",
+                      "on-primary-fixed-variant": "#6900b3",
+                      "primary": "#ddb7ff",
+                      "on-surface": "#e4e1e9",
+                      "primary-container": "#b76dff",
+                      "on-secondary-container": "#00424e",
+                      "tertiary-container": "#4d8eff",
+                      "surface-bright": "#39383e",
+                      "tertiary-fixed": "#d8e2ff",
+                      "primary-fixed": "#f0dbff",
+                      "surface-container": "#1f1f24",
+                      "on-secondary-fixed-variant": "#004e5c",
+                      "on-secondary-fixed": "#001f26",
+                      "on-secondary": "#003640",
+                      "primary-fixed-dim": "#ddb7ff",
+                      "on-surface-variant": "#cfc2d6",
+                      "surface-container-lowest": "#0e0e13",
+                      "surface": "#131318",
+                      "tertiary-fixed-dim": "#adc6ff",
+                      "error": "#ffb4ab",
+                      "surface-dim": "#131318",
+                      "outline": "#988d9f",
+                      "on-error-container": "#ffdad6",
+                      "error-container": "#93000a",
+                      "surface-variant": "#35343a",
+                      "secondary-fixed": "#acedff",
+                      "tertiary": "#adc6ff",
+                      "secondary": "#4cd7f6",
+                      "on-tertiary-fixed-variant": "#004395",
+                      "background": "#131318",
+                      "on-tertiary": "#002e6a",
+                      "on-error": "#690005",
+                      "inverse-primary": "#842bd2",
+                      "on-primary-fixed": "#2c0051",
+                      "on-primary-container": "#400071",
+                      "on-primary": "#490080",
+                      "surface-container-highest": "#35343a",
+                      "secondary-container": "#03b5d3",
+                      "on-background": "#e4e1e9",
+                      "surface-container-low": "#1b1b20",
+                      "outline-variant": "#4d4354",
+                      "on-tertiary-container": "#00285d"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "margin-desktop": "48px",
+                      "gutter": "24px",
+                      "grid-unit": "8px",
+                      "margin-mobile": "16px",
+                      "container-max-width": "1440px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Sora"],
+                      "display-lg": ["Sora"],
+                      "code-sm": ["JetBrains Mono"],
+                      "body-md": ["Inter"],
+                      "label-caps": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "code-sm": ["14px", {"lineHeight": "20px", "letterSpacing": "0", "fontWeight": "500"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400"}],
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="flex flex-col h-screen text-on-surface select-none">
+<!-- Global Top Nav Shell (Injected Style) -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin-desktop py-4 bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(132,43,210,0.2)]">
+<div class="flex items-center gap-8">
+<h1 class="font-display-lg text-[24px] bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent drop-shadow-[0_0_8px_rgba(221,183,255,0.5)]">CODEARENA</h1>
+<nav class="hidden md:flex gap-6">
+<a class="text-secondary border-b-2 border-secondary font-bold pb-2 font-label-caps text-label-caps" href="#">Arena</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-300 font-label-caps text-label-caps" href="#">Library</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-300 font-label-caps text-label-caps" href="#">Leaderboard</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-300 font-label-caps text-label-caps" href="#">Contests</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary hover:bg-primary/10 p-2 transition-all cursor-pointer">notifications</span>
+<span class="material-symbols-outlined text-primary hover:bg-primary/10 p-2 transition-all cursor-pointer">bolt</span>
+<button class="bg-primary-container text-on-primary-container px-6 py-2 font-label-caps text-label-caps hover:scale-95 active:scale-90 transition-all rounded shadow-[0_0_15px_rgba(183,109,255,0.4)]">BATTLE NOW</button>
+<div class="w-10 h-10 rounded-full border-2 border-primary overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Cyberpunk character portrait with neon purple status ring, sleek dark tech visor, and high-performance tactical interface aesthetic, set against a blurred obsidian background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOuX_gUsZlsT37X_ntaYMVqn2hbeKb_uriGYpig-mQZGBy7dAV2c0Hue3BeDSjVmcKjhzNlUCkdyq1Ssq35gVoWcvEKPNteNKN4q7xeue_qGLJE1OrFc4VpDg0u1uO92rKrEdL5IawxhitLn124AI0CU75wtpImET1jCV7TIQYTa6DKVd-gJLN2WUMfYFzJUphe_vgoD5Ta8fVDRj9QR7ZBNuSoNmmjwdQP6tfYoMT5Eh5m-oXZF7ZpYUg9dOEe-M9npZGMIPtiA"/>
+</div>
+</div>
+</header>
+<!-- Side Navigation (Injected Shell) -->
+<aside class="hidden lg:flex flex-col fixed left-0 top-[72px] h-[calc(100vh-72px)] w-64 z-40 bg-surface-container-lowest/80 backdrop-blur-2xl border-r border-white/5 shadow-2xl">
+<div class="p-6 border-b border-white/5 bg-surface-container-low/90">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 bg-secondary/20 rounded flex items-center justify-center border border-secondary/40">
+<span class="material-symbols-outlined text-secondary">workspace_premium</span>
+</div>
+<div>
+<p class="font-label-caps text-[10px] text-secondary">CYBER_CODER_01</p>
+<p class="text-[12px] font-code-sm text-on-surface-variant">RANK: ELITE (2400 RP)</p>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto py-4">
+<a class="flex items-center gap-3 text-on-surface-variant px-6 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 bg-secondary/10 text-secondary border-l-4 border-secondary-fixed-dim px-6 py-3" href="#">
+<span class="material-symbols-outlined">visibility</span>
+<span class="font-label-caps text-label-caps">Spectate</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-6 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="font-label-caps text-label-caps">Analytics</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-6 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">workspace_premium</span>
+<span class="font-label-caps text-label-caps">Achievements</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-6 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+</div>
+<div class="p-6">
+<button class="w-full py-3 bg-secondary text-on-secondary font-label-caps text-label-caps rounded-sm hover:brightness-110 transition-all shadow-[0_0_15px_rgba(76,215,246,0.3)]">UPGRADE GEAR</button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 lg:pl-64 pt-[72px] relative flex flex-col h-full bg-[#0d0d12]">
+<!-- Battle HUD -->
+<div class="z-30 w-full glass-panel border-x-0 border-t-0 p-4 flex items-center justify-between gap-8">
+<!-- Player A (User) -->
+<div class="flex-1 flex items-center gap-4">
+<div class="relative w-16 h-16 rounded border-2 border-primary pulse-glow overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a competitive coder with neon purple accent lighting on their face, wearing professional gaming peripherals, focused expression, high contrast professional studio lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbrYdJos_5UmaDxNZllPu3nagI0VDvzWfoIMLosEye_oe3HB0j-3O_PFA_n32XfOc0SUdmaiAiNkHWLJMpWHhk-FY9ESAIKGh4kGskoFrNIEq5XEJz2-h4X2BTwBvFI6zN3kw7f8dPPgDXjlJleItYwhZWokpKaqRsEKrH979__vrbJtaxnz9vnvj07KTy3rxolusMoS57K-dcdfEDeuGX61F7PWbVqu8CzeYAhvfYkFiVJU3prUcKY9DcIuLWzAMjsaOfoRA79w"/>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex justify-between items-end">
+<span class="font-label-caps text-label-caps text-primary">YOU / PLAYER A</span>
+<span class="font-code-sm text-primary">78% COMPLETE</span>
+</div>
+<div class="h-3 w-full bg-surface-container rounded-full overflow-hidden relative border border-white/5">
+<div class="absolute top-0 left-0 h-full bg-primary progress-pulse w-[78%] transition-all duration-1000 shadow-[0_0_10px_rgba(221,183,255,0.8)]"></div>
+</div>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-[16px] text-green-400" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="material-symbols-outlined text-[16px] text-green-400" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">radio_button_unchecked</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">radio_button_unchecked</span>
+</div>
+</div>
+</div>
+<!-- Timer Module -->
+<div class="flex flex-col items-center justify-center bg-surface-container-high px-10 py-3 rounded-xl border border-white/10 shadow-inner">
+<span class="font-label-caps text-[10px] text-on-surface-variant tracking-[0.2em]">REMAINING</span>
+<span class="font-display-lg text-[40px] text-on-surface leading-none tabular-nums" id="match-timer">04:37</span>
+</div>
+<!-- Player B (Opponent) -->
+<div class="flex-1 flex flex-row-reverse items-center gap-4 text-right">
+<div class="relative w-16 h-16 rounded border-2 border-secondary overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="Highly detailed futuristic profile of a competitive AI opponent, sleek metallic textures, glowing cyan optical sensors, complex circuitry patterns, dark cinematic environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvUHSzlLz7cA7rKiFAbRdwTM6KZUCxNItP2yerNmEVApo8tsGplDLgLngqO5huVWt47PYW4zoBJBo4_j1OMXtAKjortFT0i6euDzo19ZzzQB6zbLzd13LnxNQ8ZPYs16CdJ1wMITULv4rsPyikeG4Wh4-ndEBY2G7-xFl5n6DoDn4z0QreaiZPNv9bsDFT_EEFfzyqEW0UcuQ_qizXlZr52Qn1n1sSgXEUFCWROqcrjS0bslZMC-_oh-0bK8UcWvS8WbIwity3Aw"/>
+</div>
+<div class="flex-1 space-y-1">
+<div class="flex flex-row-reverse justify-between items-end">
+<span class="font-label-caps text-label-caps text-secondary">OPPONENT / PLAYER B</span>
+<span class="font-code-sm text-secondary">64% COMPLETE</span>
+</div>
+<div class="h-3 w-full bg-surface-container rounded-full overflow-hidden relative border border-white/5">
+<div class="absolute top-0 right-0 h-full bg-secondary progress-pulse w-[64%] transition-all duration-1000 shadow-[0_0_10px_rgba(76,215,246,0.8)]"></div>
+</div>
+<div class="flex flex-row-reverse gap-2">
+<span class="material-symbols-outlined text-[16px] text-green-400" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">radio_button_unchecked</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">radio_button_unchecked</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">radio_button_unchecked</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Split Screen Arena -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left: Problem Statement -->
+<div class="w-1/3 glass-panel h-full flex flex-col border-y-0 border-l-0">
+<div class="p-4 bg-surface-container-low flex items-center justify-between border-b border-white/5">
+<h2 class="font-headline-md text-[18px]">CHALLENGE_042: THE OBSIDIAN KNOT</h2>
+<span class="bg-red-500/10 text-red-400 px-3 py-1 rounded-sm font-label-caps text-[10px] border border-red-500/20">HARD</span>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-6 font-body-md text-on-surface-variant">
+<section class="space-y-3">
+<h3 class="text-on-surface font-headline-md text-[16px]">Mission Objective</h3>
+<p>Write an algorithm to decrypt the high-frequency packet stream from the Obsidian Terminal. You are given a sequence of encoded integers representing encrypted nodes. The core task is to find the longest palindromic subsequence that can be formed by rearranging the bits of any contiguous subsegment of length K.</p>
+</section>
+<section class="space-y-4">
+<div class="bg-surface-container-lowest p-4 rounded border border-white/5">
+<p class="font-label-caps text-[12px] text-on-surface mb-2">Example Case 1:</p>
+<div class="font-code-sm bg-black/40 p-3 rounded border border-white/10">
+<p class="text-secondary">Input: [12, 15, 2, 8, 3], K=3</p>
+<p class="text-primary">Output: 7</p>
+</div>
+</div>
+<div class="space-y-2">
+<p class="text-on-surface font-label-caps text-[12px]">Constraints:</p>
+<ul class="list-disc list-inside space-y-1 text-[14px]">
+<li>Array length N up to 10^5</li>
+<li>Value range: 0 ≤ V ≤ 2^31 - 1</li>
+<li>Time limit: 2.0s</li>
+<li>Memory limit: 256MB</li>
+</ul>
+</div>
+</section>
+<section class="space-y-4">
+<div class="p-4 border border-primary/20 bg-primary/5 rounded-lg flex items-start gap-4">
+<span class="material-symbols-outlined text-primary">lightbulb</span>
+<p class="text-[13px] leading-relaxed italic">PRO TIP: Use bit manipulation to track parity. Each set bit in a potential palindrome (except possibly one) must appear an even number of times.</p>
+</div>
+</section>
+</div>
+<div class="p-4 bg-surface-container-high border-t border-white/5 flex gap-2">
+<button class="flex-1 py-2 font-label-caps text-[11px] border border-white/10 hover:bg-white/5 transition-all">HINTS (2)</button>
+<button class="flex-1 py-2 font-label-caps text-[11px] border border-white/10 hover:bg-white/5 transition-all">DISCUSSION</button>
+</div>
+</div>
+<!-- Right: Code Editor Shell -->
+<div class="flex-1 h-full flex flex-col relative">
+<div class="absolute inset-0 z-0 opacity-10 pointer-events-none overflow-hidden">
+
+</div>
+<div class="z-10 p-4 bg-surface-container-low flex items-center justify-between border-b border-white/5">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded border border-white/10">
+<span class="w-2 h-2 rounded-full bg-yellow-400"></span>
+<select class="bg-transparent border-none p-0 text-[12px] font-label-caps focus:ring-0 cursor-pointer">
+<option>JAVASCRIPT (ES6)</option>
+<option>PYTHON 3.11</option>
+<option>RUST 1.70</option>
+<option>C++ 20</option>
+</select>
+</div>
+<div class="h-6 w-px bg-white/10"></div>
+<div class="flex gap-4">
+<button class="text-on-surface-variant hover:text-on-surface text-[12px] font-label-caps flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">settings_ethernet</span> CONFIG</button>
+<button class="text-on-surface-variant hover:text-on-surface text-[12px] font-label-caps flex items-center gap-1"><span class="material-symbols-outlined text-[18px]">history</span> REVISIONS</button>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-5 py-2 border border-secondary text-secondary font-label-caps text-[12px] hover:bg-secondary/10 transition-all rounded">RUN TESTS</button>
+<button class="px-5 py-2 bg-gradient-to-r from-primary to-primary-container text-on-primary font-label-caps text-[12px] hover:brightness-110 shadow-[0_0_15px_rgba(221,183,255,0.4)] transition-all rounded">SUBMIT_CODE</button>
+</div>
+</div>
+<!-- Editor Surface -->
+<div class="flex-1 z-10 flex font-code-sm relative overflow-hidden bg-[#0d0d12]/60">
+<div class="scanning-line"></div>
+<!-- Gutter -->
+<div class="w-12 bg-surface-container-lowest border-r border-white/5 flex flex-col items-center py-4 text-on-surface-variant/40 space-y-1">
+<span>1</span><span>2</span><span class="text-primary/60">3</span><span>4</span><span>5</span><span>6</span><span class="text-error/60">7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span>
+</div>
+<!-- Editor Content -->
+<div class="flex-1 p-4 whitespace-pre text-on-surface/90 overflow-y-auto">
+<span class="text-purple-400">const</span> <span class="text-blue-400">decryptStream</span> = (stream, k) =&gt; {
+    <span class="text-on-surface-variant">// Initialize bitmask tracking</span>
+<span class="text-purple-400">let</span> count = 0;
+    <span class="text-purple-400">const</span> maskHistory = <span class="text-yellow-400">new Map</span>([[0, 1]]);
+    
+    <span class="text-purple-400">for</span> (<span class="text-purple-400">let</span> i = 0; i &lt; stream.length; i++) {
+        <span class="text-on-surface-variant">// Logic to find longest palindromic subsegment</span>
+<span class="text-purple-400">const</span> currentVal = stream[i];
+        <span class="text-blue-400">applyBitmask</span>(currentVal);
+        
+        <span class="text-on-surface-variant">// Process K-constraints</span>
+<span class="text-purple-400">if</span> (i &gt;= k) {
+            <span class="text-error border-b border-error/40 italic">optimizeLookup(stream[i - k]);</span>
+        }
+    }
+    
+    <span class="text-purple-400">return</span> <span class="text-blue-400">calculateFinalMetric</span>();
+};
+
+<span class="text-purple-400">function</span> <span class="text-blue-400">applyBitmask</span>(val) {
+    <span class="text-on-surface-variant">// TODO: Implement high-performance parity bit logic</span>
+}</div>
+<!-- Execution Overlay (Mini) -->
+<div class="absolute bottom-6 right-6 w-64 glass-panel p-4 border border-primary/20">
+<div class="flex justify-between items-center mb-3">
+<span class="font-label-caps text-[10px] text-on-surface-variant">TERMINAL_OUTPUT</span>
+<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+</div>
+<div class="space-y-2 font-code-sm text-[11px]">
+<p class="text-green-400 flex justify-between"><span>TEST_CASE_1</span> <span>PASS</span></p>
+<p class="text-green-400 flex justify-between"><span>TEST_CASE_2</span> <span>PASS</span></p>
+<p class="text-on-surface-variant flex justify-between"><span>TEST_CASE_3</span> <span class="animate-pulse">RUNNING...</span></p>
+</div>
+</div>
+</div>
+<!-- Bottom Status Bar -->
+<div class="z-20 h-8 bg-surface-container-highest flex items-center px-4 justify-between border-t border-white/5">
+<div class="flex gap-4 text-[10px] font-label-caps text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 bg-green-500 rounded-full"></span> SERVER_STABLE</span>
+<span>LINE 14, COL 28</span>
+<span>UTF-8</span>
+</div>
+<div class="flex gap-4 text-[10px] font-label-caps text-on-surface-variant">
+<span class="text-secondary">LATENCY: 14MS</span>
+<span>FPS: 144</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Global Footer Shell -->
+<footer class="flex flex-col items-center gap-4 w-full px-margin-desktop py-12 bg-surface-container-highest border-t border-white/5 mt-auto z-50">
+<div class="flex gap-8">
+<a class="text-on-surface-variant hover:text-secondary font-code-sm text-code-sm transition-all opacity-80 hover:opacity-100" href="#">Privacy Protocol</a>
+<a class="text-on-surface-variant hover:text-secondary font-code-sm text-code-sm transition-all opacity-80 hover:opacity-100" href="#">Terms of Engagement</a>
+<a class="text-on-surface-variant hover:text-secondary font-code-sm text-code-sm transition-all opacity-80 hover:opacity-100" href="#">API Docs</a>
+<a class="text-on-surface-variant hover:text-secondary font-code-sm text-code-sm transition-all opacity-80 hover:opacity-100" href="#">Hardware Specs</a>
+</div>
+<div class="flex items-center gap-4">
+<span class="text-primary font-label-caps">CODEARENA</span>
+<span class="text-on-surface-variant font-code-sm text-code-sm opacity-60">© 2024 CODEARENA. SYSTEMS ONLINE.</span>
+</div>
+</footer>
+<script>
+        // Match Timer Logic
+        let timeLeft = 277; // 4:37 in seconds
+        const timerElement = document.getElementById('match-timer');
+        
+        function updateTimer() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            if (timeLeft > 0) {
+                timeLeft--;
+            } else {
+                timerElement.classList.add('text-error', 'animate-pulse');
+            }
+        }
+        
+        setInterval(updateTimer, 1000);
+
+        // Subtle parallax effect on editor background
+        document.addEventListener('mousemove', (e) => {
+            const mouseX = (e.clientX / window.innerWidth) - 0.5;
+            const mouseY = (e.clientY / window.innerHeight) - 0.5;
+            const bg = document.querySelector('webgl-shader');
+            if (bg) {
+                bg.style.transform = `translate(${mouseX * 20}px, ${mouseY * 20}px) scale(1.1)`;
+            }
+        });
+    </script>
+</body></html>

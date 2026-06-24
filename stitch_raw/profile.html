@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CODEARENA | CYBER_CODER_01 Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        :root {
+            --grid-pattern: radial-gradient(circle, #1A1A20 1px, transparent 1px);
+        }
+        body {
+            background-color: #131318;
+            background-image: var(--grid-pattern);
+            background-size: 40px 40px;
+            color: #e4e1e9;
+        }
+        .glass-panel {
+            background: rgba(19, 19, 24, 0.7);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .neon-border-gradient {
+            border: 1px solid transparent;
+            background: linear-gradient(#131318, #131318) padding-box,
+                        linear-gradient(to right, #ddb7ff, #4cd7f6) border-box;
+        }
+        .heatmap-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            transition: transform 0.2s;
+        }
+        .heatmap-cell:hover {
+            transform: scale(1.3);
+            z-index: 10;
+        }
+        @keyframes pulse-scan {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .scan-line::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #4cd7f6, transparent);
+            animation: pulse-scan 3s linear infinite;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "secondary-fixed-dim": "#4cd7f6",
+                        "inverse-on-surface": "#303035",
+                        "on-tertiary-fixed": "#001a42",
+                        "inverse-surface": "#e4e1e9",
+                        "surface-container-high": "#2a292f",
+                        "surface-tint": "#ddb7ff",
+                        "on-primary-fixed-variant": "#6900b3",
+                        "primary": "#ddb7ff",
+                        "on-surface": "#e4e1e9",
+                        "primary-container": "#b76dff",
+                        "on-secondary-container": "#00424e",
+                        "tertiary-container": "#4d8eff",
+                        "surface-bright": "#39383e",
+                        "tertiary-fixed": "#d8e2ff",
+                        "primary-fixed": "#f0dbff",
+                        "surface-container": "#1f1f24",
+                        "on-secondary-fixed-variant": "#004e5c",
+                        "on-secondary-fixed": "#001f26",
+                        "on-secondary": "#003640",
+                        "primary-fixed-dim": "#ddb7ff",
+                        "on-surface-variant": "#cfc2d6",
+                        "surface-container-lowest": "#0e0e13",
+                        "surface": "#131318",
+                        "tertiary-fixed-dim": "#adc6ff",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#131318",
+                        "outline": "#988d9f",
+                        "on-error-container": "#ffdad6",
+                        "error-container": "#93000a",
+                        "surface-variant": "#35343a",
+                        "secondary-fixed": "#acedff",
+                        "tertiary": "#adc6ff",
+                        "secondary": "#4cd7f6",
+                        "on-tertiary-fixed-variant": "#004395",
+                        "background": "#131318",
+                        "on-tertiary": "#002e6a",
+                        "on-error": "#690005",
+                        "inverse-primary": "#842bd2",
+                        "on-primary-fixed": "#2c0051",
+                        "on-primary-container": "#400071",
+                        "on-primary": "#490080",
+                        "surface-container-highest": "#35343a",
+                        "secondary-container": "#03b5d3",
+                        "on-background": "#e4e1e9",
+                        "surface-container-low": "#1b1b20",
+                        "outline-variant": "#4d4354",
+                        "on-tertiary-container": "#00285d"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "margin-desktop": "48px",
+                        "gutter": "24px",
+                        "grid-unit": "8px",
+                        "margin-mobile": "16px",
+                        "container-max-width": "1440px"
+                    },
+                    fontFamily: {
+                        "headline-md": ["Sora"],
+                        "display-lg-mobile": ["Sora"],
+                        "code-sm": ["JetBrains Mono"],
+                        "display-lg": ["Sora"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["JetBrains Mono"]
+                    },
+                    fontSize: {
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "code-sm": ["14px", {"lineHeight": "20px", "letterSpacing": "0", "fontWeight": "500"}],
+                        "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="min-h-screen flex flex-col font-body-md">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-margin-desktop py-4 bg-surface/70 dark:bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-[0_0_20px_rgba(132,43,210,0.2)]">
+<div class="flex items-center gap-8">
+<span class="font-display-lg text-[28px] bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent drop-shadow-[0_0_8px_rgba(221,183,255,0.5)]">CODEARENA</span>
+<nav class="hidden md:flex gap-6">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors duration-300" href="#">Arena</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors duration-300" href="#">Library</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors duration-300" href="#">Leaderboard</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors duration-300" href="#">Contests</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-2 mr-4">
+<span class="material-symbols-outlined text-secondary">bolt</span>
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</div>
+<button class="bg-primary text-on-primary font-label-caps text-label-caps px-6 py-2 rounded-lg hover:shadow-[0_0_15px_rgba(221,183,255,0.4)] transition-all active:scale-95">BATTLE NOW</button>
+<div class="w-10 h-10 rounded-full border-2 border-secondary overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional close-up portrait of a futuristic gamer, wearing sleek silver headphones with glowing cyan LED accents. The lighting is low-key with intense purple and teal highlights reflecting off their face. The style is hyper-realistic, capturing a sense of high-performance competitive focus and a refined cyberpunk-minimalist aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHlbgFUNPG2y4ydwYQV-m3iVjOlbyVsTwnuHQTv0y32bvSx44HKw6Yphpp8hOh59GdqSCab-mNMKXNYQpI1fXSyFuq-JgYV_gvQVYWvhTxW0iIobi1Hvfxhu7HOc6PjsJPRCfL4Ev_PqZimLwFBN9iBjEZNni3MUEwwuy5tTgxkwVYtjPUlOp2ekQxYJK6tdHZhVq61dNy4JYxeiNAK6vEKUkbLtqMt7BoSsww7Lh8sD62QWGj8dEHWFdbaOBGWeuJIBBe43x5_w"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar (Persistent Desktop Only) -->
+<aside class="hidden lg:flex flex-col fixed left-0 top-[72px] h-[calc(100vh-72px)] z-40 bg-surface-container-lowest/80 dark:bg-surface-container-lowest/80 backdrop-blur-2xl w-64 border-r border-white/5 shadow-2xl">
+<div class="p-6 flex flex-col items-center border-b border-white/5">
+<div class="relative mb-3">
+<div class="w-16 h-16 rounded-full p-1 bg-gradient-to-tr from-primary to-secondary">
+<img class="w-full h-full rounded-full object-cover" data-alt="A profile picture of an elite programmer with short dark hair, wearing a high-tech tactical hoodie. The image has a heavy blue and violet color grade, with subtle digital HUD overlays floating around the edges. The overall mood is cold, calculated, and professional, following a dark-mode cyberpunk theme." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC0lq8uh_QWkyTS9ovx5N1Fo94S_EeAmc9yt0kgnU7Fx-hTAcsoX4MYBYz4u5MSLR1KnQyR2h8R0utZc3b13HAHXBss-Y-GvoItq2ACNiUtZ532oluRYkj9QH9g-LueGKFHV2U6qQ2AcnSgydIGKSlryCWtYjS7xYEMMF_hoYfCknF1-rSb3vypwCRT1QHuoqCWA_PJHEdTB9OHvzZxqDQfk81KLR3vdAHdEQpuhiemPtS_c_3YC1aA7cSfVNU0juQrbOpK-SZLoA"/>
+</div>
+<span class="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-surface rounded-full"></span>
+</div>
+<span class="font-label-caps text-label-caps text-white mb-1">CYBER_CODER_01</span>
+<span class="font-code-sm text-[10px] text-secondary tracking-widest">RANK: ELITE (2400 RP)</span>
+</div>
+<nav class="flex-1 py-4">
+<a class="flex items-center gap-3 pl-4 py-3 bg-secondary/10 text-secondary border-l-4 border-secondary-fixed-dim transition-transform duration-300" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant pl-4 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="font-label-caps text-label-caps">Analytics</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant pl-4 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">visibility</span>
+<span class="font-label-caps text-label-caps">Spectate</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant pl-4 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">workspace_premium</span>
+<span class="font-label-caps text-label-caps">Achievements</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant pl-4 py-3 hover:bg-white/5 hover:translate-x-2 transition-all" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-white/5">
+<button class="w-full py-3 bg-white/5 hover:bg-white/10 text-primary font-label-caps text-[10px] tracking-[0.2em] rounded border border-primary/20 transition-all">
+                UPGRADE GEAR
+            </button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 lg:ml-64 pt-24 pb-12 px-margin-mobile md:px-margin-desktop max-w-container-max-width">
+<!-- Hero Profile Banner -->
+<section class="relative w-full h-80 rounded-xl overflow-hidden mb-8 glass-panel shadow-2xl">
+<div class="absolute inset-0 z-0">
+
+<div class="w-full h-full bg-cover bg-center opacity-30" data-alt="A wide cinematic landscape of a futuristic digital metropolis at night, filled with glowing neon purple and cyan skyscrapers. The atmosphere is hazy with volumetric light beams and a subtle digital grid overlaying the sky. The art style is crisp, low-poly cyberpunk with a high-end gaming aesthetic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDixcXTkviLvpCXssRG7i0utXQ1UHXLb11GtWEabpECjWHpz1J1ggbI_GP7hL5S6zw5COfz-uqplEbLR-2T5tm_YSkBLiq9s-MGiOfvr56r0S4kweJOur-7ZmnCfzso2WW3Pz_px2Ux9Bcyiflgc4R3IvpQqBlYeCO4hhT2RL8hG6YmtGQ7Y1iFp1XJ6xFPR3TWcogNAMZzgGatVK20gIwOvjBGT-eSwd18gnVQDBXKO9dJTQ5XXHdwAmsBzk0GLWzRXuqiELC56w')"></div>
+</div>
+<div class="absolute inset-0 z-10 bg-gradient-to-t from-surface via-surface/40 to-transparent"></div>
+<div class="absolute bottom-0 left-0 w-full p-8 z-20 flex flex-col md:flex-row items-end justify-between gap-6">
+<div class="flex items-center gap-6">
+<div class="relative">
+<div class="w-32 h-32 rounded-xl p-1 bg-gradient-to-tr from-primary to-secondary shadow-[0_0_30px_rgba(221,183,255,0.3)]">
+<img class="w-full h-full rounded-lg object-cover" data-alt="A futuristic character portrait of a high-ranking esports player. They are wearing an obsidian-black hardshell suit with integrated glowing violet circuits. The background is a blurred data stream. The lighting is sharp, creating dramatic highlights on the metallic surfaces of the suit." src="https://lh3.googleusercontent.com/aida-public/AB6AXuANZHF6u1V1WmymRr49T3Nq4CaO-UmUpqdYBR5eDVWtLr0sNDy8kJqExZqaqmpkU_HhKntAJwnPBPN8qkmjPOVgZfPMXsfWqLNZ3s0QHYlD57wIMQp6o8Dv_IP9_iwOxjVYQiUkH9o75w-o2S4dpPyOexFlJ_y_QiB6I_CLiC-Zr4sfMA0rudf6Sai-AQ6RuGjoju4J9fh095Hyd-OcckHCTmJxfMIP9Bi-qZxaWn8Y4r4p6XEd-t_RQHzyxXuh71MMTk5JyON3dw"/>
+</div>
+</div>
+<div class="mb-2">
+<div class="flex items-center gap-3 mb-1">
+<h1 class="font-headline-md text-headline-md text-white">CYBER_CODER_01</h1>
+<div class="px-3 py-1 bg-primary/20 border border-primary/40 rounded text-primary text-[10px] font-label-caps flex items-center gap-1 shadow-[0_0_10px_rgba(221,183,255,0.2)]">
+<span class="material-symbols-outlined text-[14px]">shield</span>
+                                KNIGHT
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm font-code-sm">Top 0.5% of Competitive Algorithmic Arena</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="glass-panel px-6 py-3 rounded-lg border border-white/10 flex flex-col items-center min-w-[120px]">
+<span class="text-[10px] font-label-caps text-on-surface-variant mb-1">ARENA COINS</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">monetization_on</span>
+<span class="font-display-lg text-[24px] text-white">12,450</span>
+</div>
+</div>
+<div class="glass-panel px-6 py-3 rounded-lg border border-white/10 flex flex-col items-center min-w-[120px]">
+<span class="text-[10px] font-label-caps text-on-surface-variant mb-1">GLOBAL RANK</span>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">public</span>
+<span class="font-display-lg text-[24px] text-white">#412</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Main Column -->
+<div class="lg:col-span-8 space-y-gutter">
+<!-- Tabs -->
+<nav class="flex gap-8 border-b border-white/10 mb-2">
+<a class="text-secondary border-b-2 border-secondary font-bold pb-2 font-label-caps text-label-caps" href="#">Overview</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-300 font-label-caps text-label-caps" href="#">Achievements</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-300 font-label-caps text-label-caps" href="#">Match History</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors duration-300 font-label-caps text-label-caps" href="#">Preferred Languages</a>
+</nav>
+<!-- Activity Heatmap -->
+<div class="glass-panel p-6 rounded-xl relative overflow-hidden">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-label-caps text-label-caps text-white">12-MONTH ACTIVITY</h3>
+<div class="flex gap-1">
+<span class="text-[10px] text-on-surface-variant">Less</span>
+<div class="heatmap-cell bg-white/5"></div>
+<div class="heatmap-cell bg-secondary/20"></div>
+<div class="heatmap-cell bg-secondary/50"></div>
+<div class="heatmap-cell bg-secondary/80"></div>
+<div class="heatmap-cell bg-secondary"></div>
+<span class="text-[10px] text-on-surface-variant ml-1">More</span>
+</div>
+</div>
+<div class="overflow-x-auto">
+<div class="flex gap-1 min-w-[600px]">
+<!-- Generate a grid of cells for visualization -->
+<script>
+                                const heatmapContainer = document.currentScript.parentElement;
+                                const levels = ['bg-white/5', 'bg-secondary/20', 'bg-secondary/50', 'bg-secondary/80', 'bg-secondary'];
+                                for (let i = 0; i < 52; i++) {
+                                    const col = document.createElement('div');
+                                    col.className = 'flex flex-col gap-1';
+                                    for (let j = 0; j < 7; j++) {
+                                        const cell = document.createElement('div');
+                                        const randomLevel = levels[Math.floor(Math.random() * 5)];
+                                        cell.className = `heatmap-cell ${randomLevel}`;
+                                        col.appendChild(cell);
+                                    }
+                                    heatmapContainer.appendChild(col);
+                                }
+                            </script>
+</div>
+</div>
+<div class="mt-4 flex justify-between text-[10px] font-code-sm text-on-surface-variant">
+<span>JAN</span><span>FEB</span><span>MAR</span><span>APR</span><span>MAY</span><span>JUN</span><span>JUL</span><span>AUG</span><span>SEP</span><span>OCT</span><span>NOV</span><span>DEC</span>
+</div>
+</div>
+<!-- Rating Progress Chart -->
+<div class="glass-panel p-6 rounded-xl scan-line relative">
+<h3 class="font-label-caps text-label-caps text-white mb-8">RATING PROGRESS</h3>
+<div class="h-64 w-full relative">
+<!-- Simulated Line Chart with SVG -->
+<svg class="w-full h-full" viewbox="0 0 800 200">
+<defs>
+<lineargradient id="lineGrad" x1="0" x2="1" y1="0" y2="0">
+<stop offset="0%" stop-color="#ddb7ff"></stop>
+<stop offset="100%" stop-color="#4cd7f6"></stop>
+</lineargradient>
+<filter id="glow">
+<fegaussianblur result="blur" stddeviation="3"></fegaussianblur>
+<fecomposite in="SourceGraphic" in2="blur" operator="over"></fecomposite>
+</filter>
+</defs>
+<path d="M0,180 L50,160 L100,170 L150,140 L200,150 L250,100 L300,110 L350,80 L400,90 L450,50 L500,60 L550,30 L600,45 L650,20 L700,25 L800,10" fill="none" filter="url(#glow)" stroke="url(#lineGrad)" stroke-width="3"></path>
+<!-- Grid lines -->
+<line stroke="white" stroke-opacity="0.05" x1="0" x2="800" y1="50" y2="50"></line>
+<line stroke="white" stroke-opacity="0.05" x1="0" x2="800" y1="100" y2="100"></line>
+<line stroke="white" stroke-opacity="0.05" x1="0" x2="800" y1="150" y2="150"></line>
+</svg>
+<div class="absolute top-0 left-0 flex flex-col justify-between h-full text-[10px] font-code-sm text-on-surface-variant">
+<span>2800</span><span>2400</span><span>2000</span><span>1600</span>
+</div>
+</div>
+</div>
+<!-- Match History Sample -->
+<div class="glass-panel rounded-xl overflow-hidden">
+<div class="p-4 border-b border-white/5 flex justify-between items-center">
+<h3 class="font-label-caps text-label-caps text-white">RECENT BATTLES</h3>
+<button class="text-[10px] font-label-caps text-secondary">VIEW ALL</button>
+</div>
+<div class="divide-y divide-white/5">
+<div class="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-2 h-10 bg-green-500 rounded-full"></div>
+<div>
+<p class="font-bold text-white text-sm">Binary Search Optimization</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-code-sm">Ranked Arena • 12m ago</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-secondary font-code-sm text-sm">+24 RP</p>
+<p class="text-[10px] text-on-surface-variant">1.2s Runtime</p>
+</div>
+</div>
+<div class="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-2 h-10 bg-green-500 rounded-full"></div>
+<div>
+<p class="font-bold text-white text-sm">Dynamic Tree Balancing</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-code-sm">Ranked Arena • 2h ago</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-secondary font-code-sm text-sm">+18 RP</p>
+<p class="text-[10px] text-on-surface-variant">0.8s Runtime</p>
+</div>
+</div>
+<div class="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-2 h-10 bg-red-500 rounded-full"></div>
+<div>
+<p class="font-bold text-white text-sm">Graph Flow Analysis</p>
+<p class="text-[10px] text-on-surface-variant uppercase font-code-sm">Contest #42 • 5h ago</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-error font-code-sm text-sm">-12 RP</p>
+<p class="text-[10px] text-on-surface-variant">TLE Error</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar Column -->
+<div class="lg:col-span-4 space-y-gutter">
+<!-- Top Achievements -->
+<div class="glass-panel p-6 rounded-xl">
+<h3 class="font-label-caps text-label-caps text-white mb-6">TOP 3 ACHIEVEMENTS</h3>
+<div class="space-y-6">
+<div class="flex items-center gap-4 group">
+<div class="w-14 h-14 rounded-full bg-secondary/10 border border-secondary/30 flex items-center justify-center shadow-[0_0_20px_rgba(76,215,246,0.2)] transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-secondary text-3xl" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+<div>
+<p class="font-bold text-white text-sm">Grandmaster Sage</p>
+<p class="text-[10px] text-on-surface-variant font-code-sm">Won 50 consecutive arena matches.</p>
+</div>
+</div>
+<div class="flex items-center gap-4 group">
+<div class="w-14 h-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center shadow-[0_0_20px_rgba(221,183,255,0.2)] transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div>
+<p class="font-bold text-white text-sm">Code Surgeon</p>
+<p class="text-[10px] text-on-surface-variant font-code-sm">Solved 5 hard problems under 5 mins.</p>
+</div>
+</div>
+<div class="flex items-center gap-4 group">
+<div class="w-14 h-14 rounded-full bg-tertiary/10 border border-tertiary/30 flex items-center justify-center shadow-[0_0_20px_rgba(173,198,255,0.2)] transition-all group-hover:scale-110">
+<span class="material-symbols-outlined text-tertiary text-3xl" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+</div>
+<div>
+<p class="font-bold text-white text-sm">Zero Latency</p>
+<p class="text-[10px] text-on-surface-variant font-code-sm">Best execution time in 10 contests.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Languages -->
+<div class="glass-panel p-6 rounded-xl">
+<h3 class="font-label-caps text-label-caps text-white mb-6">PREFEERED LANGUAGES</h3>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="font-code-sm text-white">RUST</span>
+<span class="font-code-sm text-on-surface-variant">64%</span>
+</div>
+<div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-blue-500 w-[64%] relative">
+<div class="absolute inset-0 bg-white/20 animate-pulse"></div>
+</div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="font-code-sm text-white">PYTHON</span>
+<span class="font-code-sm text-on-surface-variant">22%</span>
+</div>
+<div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-purple-500 w-[22%]"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="font-code-sm text-white">C++</span>
+<span class="font-code-sm text-on-surface-variant">14%</span>
+</div>
+<div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-tertiary to-blue-300 w-[14%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Friends/Social -->
+<div class="glass-panel p-6 rounded-xl">
+<h3 class="font-label-caps text-label-caps text-white mb-4">ACTIVE RIVALS</h3>
+<div class="flex flex-wrap gap-3">
+<div class="w-10 h-10 rounded-lg border border-white/10 overflow-hidden hover:border-secondary transition-all cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="A portrait icon of a user, digital tech style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9UMQ7u-zbou9x_ZL93SANKbjS3Pjbcovx0uGhLdLzNDT5-hXNqgmarD9GqpkbTVpJLm9zR5juopEODhm_yLAam3SUKoQowxLEwI_goqzcthUxRGTxC1p1fZUBfKWvdufG7WKJ2lrUnDQ_3hD5SjFi1M42S24LhfynH-pvrmpPWLUvPkFD2mN9v8FpBINxN06p1aNODIfEjtJm5o7TvGzGRisCLCR6Gk1xQsbvP1-BOGyNq_H5_P41DAw8OS0MQtdRS4Q47561Uw"/>
+</div>
+<div class="w-10 h-10 rounded-lg border border-white/10 overflow-hidden hover:border-secondary transition-all cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="A portrait icon of a user, digital tech style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAL9-0gNJoIO3YIBd6V5ZgoOSyidhRATAtkbbcOGyMEzY93XDrGHSv-HfmoCRkqSgOAY1oFNMOoyXlHCpjeB-ohIRR3tMDqYV1MuhRawS2Oz3aFWRXhiKIcvnj-k9N4ScSKlKj1SO-JyKCKOES_g4isfxBMOpd9DybpYEW9nRxSdQMCFDqINNAtEPtk7x5jz2UbbzbivhYPaHGF6aHtZJV5lBfd4FRd6OK6R2T4bj4lULkfO-uPnwWACeZwzgMugfGeaAWrgPCUmw"/>
+</div>
+<div class="w-10 h-10 rounded-lg border border-white/10 overflow-hidden hover:border-secondary transition-all cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="A portrait icon of a user, digital tech style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdFjKR_Hd6HHz3uvPu939lqV1WxmsGcixKdkSP0mVgql-dlzWqApaGMSsasom8gI6npq7ywPzWsAi_6b5bsMahHjZ1KzW9ST6JSKHpGsiwqNvAmCJz7hlnR8aFSzuG9zhgo7fC3QOCJz-gm1I3K9byKDfkYr5zrUzCHZP5ytxQKVxs-ygQV477iTSG7CpSi_a778IBVnnDV1RNVSd6k3wlQKGz6N1siDNxdVUmfTTRNQKmzVSfYt_-DBHtHE2aHEDfAZ0OuigIPw"/>
+</div>
+<div class="w-10 h-10 rounded-lg border border-white/10 overflow-hidden hover:border-secondary transition-all cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="A portrait icon of a user, digital tech style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXPIkUP7vZpkF2XjmMHRGrJxxDqznXSjDZWm8AGcrrY7YKjaKxkvyVKlNqiukvP247uFBGyVTxFAMUnjL1GN3XOPF6qH1G-pz7iy4kiEY3neUjsnCJYS_JQyzBfC1TBXLSi3fTtNTr7m7Zl1cx3ptTzVJFA94wysGz_Veqkil_aLz4HsAATyP3T2IDacEGtq-5Ce299gEHea8bcAPimK3s4LKEklRemrY_w34hlEaDsZuAJmzmxvWvqHptwiSlNZGFlwdkW3jnsg"/>
+</div>
+<div class="w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center text-on-surface-variant hover:bg-white/5 cursor-pointer">
+<span class="material-symbols-outlined">add</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="mt-auto flex flex-col items-center gap-4 w-full px-margin-desktop py-12 bg-surface-container-highest border-t border-white/5">
+<div class="flex gap-8">
+<a class="text-on-surface-variant hover:text-secondary text-code-sm font-code-sm transition-all" href="#">Privacy Protocol</a>
+<a class="text-on-surface-variant hover:text-secondary text-code-sm font-code-sm transition-all" href="#">Terms of Engagement</a>
+<a class="text-on-surface-variant hover:text-secondary text-code-sm font-code-sm transition-all" href="#">API Docs</a>
+<a class="text-on-surface-variant hover:text-secondary text-code-sm font-code-sm transition-all" href="#">Hardware Specs</a>
+</div>
+<p class="text-on-surface-variant font-code-sm text-code-sm opacity-80">© 2024 CODEARENA. SYSTEMS ONLINE.</p>
+</footer>
+<!-- BottomNavBar (Mobile Only) -->
+<div class="md:hidden fixed bottom-0 left-0 w-full bg-surface/90 backdrop-blur-xl border-t border-white/10 flex justify-around py-3 z-50">
+<button class="flex flex-col items-center gap-1 text-secondary">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-label-caps">Home</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="text-[10px] font-label-caps">Stats</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">workspace_premium</span>
+<span class="text-[10px] font-label-caps">Awards</span>
+</button>
+<button class="flex flex-col items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-label-caps">Settings</span>
+</button>
+</div>
+</body></html>

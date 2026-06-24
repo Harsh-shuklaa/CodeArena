@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CODEARENA | Terminal Access</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed-dim": "#4cd7f6",
+                    "inverse-on-surface": "#303035",
+                    "on-tertiary-fixed": "#001a42",
+                    "inverse-surface": "#e4e1e9",
+                    "surface-container-high": "#2a292f",
+                    "surface-tint": "#ddb7ff",
+                    "on-primary-fixed-variant": "#6900b3",
+                    "primary": "#ddb7ff",
+                    "on-surface": "#e4e1e9",
+                    "primary-container": "#b76dff",
+                    "on-secondary-container": "#00424e",
+                    "tertiary-container": "#4d8eff",
+                    "surface-bright": "#39383e",
+                    "tertiary-fixed": "#d8e2ff",
+                    "primary-fixed": "#f0dbff",
+                    "surface-container": "#1f1f24",
+                    "on-secondary-fixed-variant": "#004e5c",
+                    "on-secondary-fixed": "#001f26",
+                    "on-secondary": "#003640",
+                    "primary-fixed-dim": "#ddb7ff",
+                    "on-surface-variant": "#cfc2d6",
+                    "surface-container-lowest": "#0e0e13",
+                    "surface": "#131318",
+                    "tertiary-fixed-dim": "#adc6ff",
+                    "error": "#ffb4ab",
+                    "surface-dim": "#131318",
+                    "outline": "#988d9f",
+                    "on-error-container": "#ffdad6",
+                    "error-container": "#93000a",
+                    "surface-variant": "#35343a",
+                    "secondary-fixed": "#acedff",
+                    "tertiary": "#adc6ff",
+                    "secondary": "#4cd7f6",
+                    "on-tertiary-fixed-variant": "#004395",
+                    "background": "#131318",
+                    "on-tertiary": "#002e6a",
+                    "on-error": "#690005",
+                    "inverse-primary": "#842bd2",
+                    "on-primary-fixed": "#2c0051",
+                    "on-primary-container": "#400071",
+                    "on-primary": "#490080",
+                    "surface-container-highest": "#35343a",
+                    "secondary-container": "#03b5d3",
+                    "on-background": "#e4e1e9",
+                    "surface-container-low": "#1b1b20",
+                    "outline-variant": "#4d4354",
+                    "on-tertiary-container": "#00285d"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-desktop": "48px",
+                    "gutter": "24px",
+                    "grid-unit": "8px",
+                    "margin-mobile": "16px",
+                    "container-max-width": "1440px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Sora"],
+                    "display-lg-mobile": ["Sora"],
+                    "code-sm": ["JetBrains Mono"],
+                    "display-lg": ["Sora"],
+                    "body-md": ["Inter"],
+                    "label-caps": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "code-sm": ["14px", {"lineHeight": "20px", "letterSpacing": "0", "fontWeight": "500"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "letterSpacing": "0", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .scanner-bg {
+            background-image: linear-gradient(#1A1A20 1px, transparent 1px), linear-gradient(90deg, #1A1A20 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .glass-panel {
+            background: rgba(19, 19, 24, 0.7);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(221, 183, 255, 0.1);
+        }
+        .input-glow:focus-within {
+            box-shadow: 0 0 15px rgba(221, 183, 255, 0.2);
+            border-color: #ddb7ff;
+        }
+        .btn-glow-primary {
+            box-shadow: 0 0 20px rgba(132, 43, 210, 0.4);
+        }
+        .btn-glow-primary:hover {
+            box-shadow: 0 0 30px rgba(132, 43, 210, 0.6);
+        }
+        .scanline {
+            width: 100%;
+            height: 2px;
+            background: rgba(76, 215, 246, 0.3);
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: scan 4s linear infinite;
+        }
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            5% { opacity: 1; }
+            95% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface selection:bg-primary selection:text-on-primary-container overflow-hidden">
+<!-- Auth Shell Suppression: Nav is removed for transactional focus -->
+<main class="relative min-h-screen w-full flex overflow-hidden">
+<!-- Left Side: Cinematic Branding & Visuals -->
+<section class="hidden lg:flex lg:w-1/2 relative bg-surface-container-lowest items-center justify-center overflow-hidden border-r border-white/5">
+<!-- Background Scanner Grid -->
+<div class="absolute inset-0 scanner-bg opacity-40"></div>
+<!-- Animated Background (Conceptual Shader) -->
+<div class="absolute inset-0 opacity-30 mix-blend-screen pointer-events-none">
+
+</div>
+<!-- Branding Core -->
+<div class="relative z-10 flex flex-col items-center text-center px-12">
+<div class="mb-8">
+<!-- Brand Anchor from JSON: style_brand_logo -->
+<h1 class="font-display-lg text-display-lg bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent drop-shadow-[0_0_12px_rgba(221,183,255,0.4)] tracking-tighter">
+                        CODEARENA
+                    </h1>
+<div class="h-1 w-24 bg-gradient-to-r from-primary to-secondary mx-auto mt-2 rounded-full"></div>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md mb-12">
+                    Enter the high-stakes ecosystem where elite developers compete in low-latency environments. Systems online. Ready for deployment.
+                </p>
+<!-- High Fidelity Image Representation -->
+<div class="w-full max-w-lg aspect-video rounded-xl overflow-hidden glass-panel relative group">
+<img class="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700" data-alt="A cinematic, high-performance developer workspace in a cyberpunk aesthetic. The scene features multiple curved monitors glowing with purple and cyan syntax-highlighted code, reflected on a polished dark obsidian desk. Ambient neon lighting cast deep shadows while floating holographic data displays provide a futuristic technological vibe. The atmosphere is intense, focused, and professional, perfectly capturing the elite esports coding environment of CodeArena." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfrOTk_kPw_O-ozv0MTbPf4K1baNyvv6VxQ5ih32osleO3vMK30eNb1-K4sL7neRorHGJSgsqmawint1sldIpNas4qIAukXl58sQ9DfISCe8k5ipI1aNpXIuf0_bsdRRGCVKL1SAhUxrD1-_NNv6uZG4PpDX3BshimZWdDKbbdmEyAdWCRfSMwlk9lhpn8cP1RA55RNMaXtV089Tus1yeoPJxclKQVys6ftkZtpJlE-tahrHzJeLXcGSMxpw6dISQpJK42XDQRRQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
+<div class="scanline"></div>
+</div>
+<div class="mt-12 flex gap-8 items-center">
+<div class="flex flex-col items-center">
+<span class="font-label-caps text-label-caps text-secondary mb-1">ACTIVE USERS</span>
+<span class="font-code-sm text-code-sm text-on-surface">14,204</span>
+</div>
+<div class="w-px h-8 bg-white/10"></div>
+<div class="flex flex-col items-center">
+<span class="font-label-caps text-label-caps text-secondary mb-1">SYSTEM STATUS</span>
+<span class="font-code-sm text-code-sm text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_#4cd7f6] animate-pulse"></span>
+                            OPERATIONAL
+                        </span>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Side: Auth Card -->
+<section class="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 scanner-bg relative">
+<div class="w-full max-w-md glass-panel p-8 md:p-10 rounded-xl relative overflow-hidden">
+<!-- Card Header -->
+<header class="mb-10 text-center lg:text-left">
+<!-- Mobile Logo (Hidden on Desktop) -->
+<h1 class="lg:hidden font-display-lg-mobile text-display-lg-mobile bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-4">
+                        CODEARENA
+                    </h1>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">ACCESS TERMINAL</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Identify yourself to enter the arena.</p>
+</header>
+<!-- Social Auth Cluster -->
+<div class="grid grid-cols-2 gap-4 mb-8">
+<button class="flex items-center justify-center gap-3 py-3 border border-white/10 rounded-lg font-label-caps text-label-caps text-on-surface hover:bg-white/5 hover:border-secondary/50 transition-all active:scale-95">
+<svg class="w-5 h-5 fill-current" viewbox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path></svg>
+                        GITHUB
+                    </button>
+<button class="flex items-center justify-center gap-3 py-3 border border-white/10 rounded-lg font-label-caps text-label-caps text-on-surface hover:bg-white/5 hover:border-secondary/50 transition-all active:scale-95">
+<svg class="w-5 h-5 fill-current" viewbox="0 0 24 24"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"></path></svg>
+                        GOOGLE
+                    </button>
+</div>
+<div class="relative flex items-center justify-center mb-8">
+<div class="w-full h-px bg-white/10"></div>
+<span class="absolute bg-surface px-4 font-label-caps text-[10px] text-on-surface-variant tracking-[0.2em]">OR LOGIN WITH EMAIL</span>
+</div>
+<!-- Main Form -->
+<form class="space-y-6" onsubmit="event.preventDefault();">
+<div class="space-y-2 group">
+<label class="block font-label-caps text-label-caps text-on-surface-variant group-focus-within:text-primary transition-colors">EMAIL ADDRESS</label>
+<div class="relative input-glow border border-white/10 bg-surface-container-lowest rounded-lg transition-all duration-300">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">alternate_email</span>
+<input class="w-full bg-transparent border-none py-3 pl-11 pr-4 text-on-surface font-body-md focus:ring-0 placeholder:text-on-surface-variant/30" placeholder="cyber_coder@arena.io" type="email"/>
+</div>
+</div>
+<div class="space-y-2 group">
+<div class="flex justify-between items-center">
+<label class="block font-label-caps text-label-caps text-on-surface-variant group-focus-within:text-primary transition-colors">PASSWORD</label>
+<a class="text-[10px] font-label-caps text-secondary hover:text-primary transition-colors" href="#">FORGOT KEY?</a>
+</div>
+<div class="relative input-glow border border-white/10 bg-surface-container-lowest rounded-lg transition-all duration-300">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">lock</span>
+<input class="w-full bg-transparent border-none py-3 pl-11 pr-4 text-on-surface font-body-md focus:ring-0 placeholder:text-on-surface-variant/30" placeholder="••••••••••••" type="password"/>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<input class="w-4 h-4 rounded-sm bg-surface-container-lowest border-white/10 text-primary focus:ring-primary focus:ring-offset-background" id="remember" type="checkbox"/>
+<label class="font-body-md text-[13px] text-on-surface-variant select-none" for="remember">KEEP CONNECTION ACTIVE</label>
+</div>
+<button class="w-full py-4 bg-gradient-to-r from-primary-container to-inverse-primary rounded-lg font-label-caps text-label-caps text-on-primary-container btn-glow-primary active:scale-[0.98] transition-all duration-200 tracking-widest">
+                        BATTLE NOW
+                    </button>
+</form>
+<footer class="mt-8 text-center">
+<p class="font-body-md text-on-surface-variant text-[14px]">
+                        NO ACCESS GRANTED? 
+                        <a class="font-bold text-primary hover:underline ml-1" href="#">INITIALIZE ACCOUNT</a>
+</p>
+</footer>
+<!-- Decorative corner accents -->
+<div class="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-secondary/20 rounded-tr-lg"></div>
+<div class="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-primary/20 rounded-bl-lg"></div>
+</div>
+<!-- Footer-style credits as per JSON style but minimalist for Auth -->
+<div class="absolute bottom-6 font-code-sm text-code-sm text-on-surface-variant opacity-40">
+                © 2024 CODEARENA. SYSTEMS ONLINE.
+            </div>
+</section>
+</main>
+<!-- Overlay Interaction Script -->
+<script>
+        // Subtle interaction for input fields
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('focus', () => {
+                input.closest('.glass-panel').style.boxShadow = '0 0 40px rgba(132, 43, 210, 0.1)';
+            });
+            input.addEventListener('blur', () => {
+                input.closest('.glass-panel').style.boxShadow = 'none';
+            });
+        });
+    </script>
+</body></html>
