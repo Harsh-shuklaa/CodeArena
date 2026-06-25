@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
 import { UserContext } from "./UserContext";
 
-const API_URL = "http://localhost:5000";
+const API_URL = "http://localhost:5001";
 
 const DEFAULT_USER = {
   username: "Guest_Coder",
@@ -29,21 +29,28 @@ export function UserProvider({ children }) {
 
   // Establish socket connection
   const connectSocket = (token) => {
-    if (!token) return null;
-    
     // Disconnect existing socket first
     if (socket) {
       socket.disconnect();
     }
 
     const newSocket = io(API_URL, {
-      auth: { token }
+      auth: { token: token || "" }
     });
     
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
       console.log("[SOCKET] Connected to real-time server");
+    });
+
+    newSocket.on("guestAssigned", (guestUser) => {
+      console.log("[SOCKET] Assigned guest profile:", guestUser.username);
+      setUser((prev) => ({
+        ...prev,
+        ...guestUser,
+        isLoggedIn: false
+      }));
     });
 
     newSocket.on("error", (err) => {
@@ -78,10 +85,14 @@ export function UserProvider({ children }) {
           } else {
             console.warn("Session token expired or invalid");
             localStorage.removeItem("codearena_token");
+            connectSocket(null);
           }
         } catch (e) {
           console.error("Failed to restore operator session", e);
+          connectSocket(null);
         }
+      } else {
+        connectSocket(null);
       }
       setIsLoading(false);
     };
@@ -159,10 +170,7 @@ export function UserProvider({ children }) {
   const logout = () => {
     localStorage.removeItem("codearena_token");
     setUser(DEFAULT_USER);
-    if (socket) {
-      socket.disconnect();
-      setSocket(null);
-    }
+    connectSocket(null);
   };
 
   const updateAvatar = (newAvatarUrl) => {

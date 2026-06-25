@@ -11,11 +11,11 @@ export default function Navbar() {
   const links = user.isLoggedIn
     ? [
         { name: "Dashboard", path: "/dashboard" },
-        { name: "Queue", path: "/matchmaking" },
+        { name: "Battles", path: "/matchmaking" },
         { name: "Leaderboard", path: "/leaderboard" },
       ]
     : [
-        { name: "Features", path: "/#features", isAnchor: true },
+        { name: "Battles", path: "/matchmaking" },
         { name: "Leaderboard", path: "/leaderboard" },
       ];
 

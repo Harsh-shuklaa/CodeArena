@@ -2,14 +2,14 @@ const express = require("express");
 const User = require("../models/User");
 const Match = require("../models/Match");
 
-const route = express();
+const router = express.Router();
 
 /**
  * @route   GET /api/user/leaderboard
  * @desc    Get top users sorted by ELO rating
  * @access  Public
  */
-route.get("/leaderboard", async (req, res) => {
+router.get("/leaderboard", async (req, res) => {
   try {
     const users = await User.find({})
       .sort({ elo: -1 })
@@ -27,7 +27,7 @@ route.get("/leaderboard", async (req, res) => {
  * @desc    Get user profile details & match history
  * @access  Public
  */
-route.get("/:username", async (req, res) => {
+router.get("/:username", async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username }).select("-passwordHash");
 

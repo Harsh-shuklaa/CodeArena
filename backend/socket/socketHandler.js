@@ -25,9 +25,70 @@ const verifyUserToken = async (token) => {
   }
 };
 
+const getOrCreateGuestUser = async (socketId) => {
+  try {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const username = `Guest_${randomSuffix}`;
+    const email = `guest_${socketId}@codearena.dev`;
+    const user = await User.create({
+      username,
+      email,
+      passwordHash: "guest_dummy_hash",
+      elo: 1200,
+      coins: 250,
+      xp: 0,
+      level: 1,
+      wins: 0,
+      losses: 0
+    });
+    return user;
+  } catch (error) {
+    console.error("[SOCKET GUEST CREATION ERROR]", error.message);
+    const randomSuffix = Math.floor(10000 + Math.random() * 90000);
+    const username = `Guest_${randomSuffix}`;
+    const email = `guest_retry_${randomSuffix}@codearena.dev`;
+    const user = await User.create({
+      username,
+      email,
+      passwordHash: "guest_dummy_hash",
+      elo: 1200,
+      coins: 250,
+      xp: 0,
+      level: 1,
+      wins: 0,
+      losses: 0
+    });
+    return user;
+  }
+};
+
 const handleSocketConnections = (io) => {
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     console.log(`[SOCKET] Node connected: ${socket.id}`);
+
+    // Authenticate connection immediately
+    const token = socket.handshake.auth?.token;
+    let user = await verifyUserToken(token);
+    if (user) {
+      socket.user = user;
+      console.log(`[SOCKET] Authenticated user ${user.username} for socket ${socket.id}`);
+    } else {
+      user = await getOrCreateGuestUser(socket.id);
+      socket.user = user;
+      console.log(`[SOCKET] Assigned guest user ${user.username} for socket ${socket.id}`);
+      socket.emit("guestAssigned", {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        elo: user.elo,
+        coins: user.coins,
+        xp: user.xp,
+        level: user.level,
+        wins: user.wins,
+        losses: user.losses,
+      });
+    }
 
     // ==========================================
     // 1. MATCHMAKING EVENTS
@@ -35,8 +96,7 @@ const handleSocketConnections = (io) => {
 
     socket.on("joinQueue", async (data) => {
       try {
-        const { token } = data || {};
-        const user = await verifyUserToken(token);
+        const user = socket.user;
 
         if (!user) {
           socket.emit("error", { message: "Invalid session credentials" });
@@ -127,8 +187,8 @@ const handleSocketConnections = (io) => {
     // ==========================================
 
     socket.on("joinRoom", async (data) => {
-      const { matchId, token } = data || {};
-      const user = await verifyUserToken(token);
+      const { matchId } = data || {};
+      const user = socket.user;
 
       if (!user) {
         socket.emit("error", { message: "Verification failed on joinRoom" });
@@ -137,6 +197,14 @@ const handleSocketConnections = (io) => {
 
       try {
         const isCustomRoom = matchId && matchId.startsWith("CA-");
+
+        if (isCustomRoom && !activeBattles.has(matchId)) {
+          if (user.username.startsWith("Guest_")) {
+            socket.emit("error", { message: "Guests are not authorized to create custom rooms. Please sign up." });
+            return;
+          }
+        }
+
         socket.join(matchId);
         console.log(`[BATTLE] Operator ${user.username} joined room ${matchId}`);
 
@@ -313,8 +381,8 @@ const handleSocketConnections = (io) => {
     // 4. SUBMIT CODE ACTIONS (VERIFY HIDDEN TESTCASES)
     // ==========================================
     socket.on("submitCode", async (data) => {
-      const { matchId, code, language, token } = data || {};
-      const user = await verifyUserToken(token);
+      const { matchId, code, language } = data || {};
+      const user = socket.user;
 
       if (!user) {
         socket.emit("submissionResult", { success: false, statusDescription: "Auth Failed" });

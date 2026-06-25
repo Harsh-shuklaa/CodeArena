@@ -15,7 +15,7 @@ export default function Result() {
     const fetchMatch = async () => {
       if (!matchId) return;
       try {
-        const res = await fetch(`http://localhost:5000/api/match/${matchId}`);
+        const res = await fetch(`http://localhost:5001/api/match/${matchId}`);
         if (res.ok) {
           const data = await res.json();
           setMatchDetails(data);

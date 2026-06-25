@@ -99,38 +99,10 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/matchmaking"
-          element={
-            <ProtectedRoute>
-              <Matchmaking />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/battle/:matchId"
-          element={
-            <ProtectedRoute>
-              <Battle />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/result/:matchId"
-          element={
-            <ProtectedRoute>
-              <Result />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/leaderboard"
-          element={
-            <ProtectedRoute>
-              <Leaderboard />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/matchmaking" element={<Matchmaking />} />
+        <Route path="/battle/:matchId" element={<Battle />} />
+        <Route path="/result/:matchId" element={<Result />} />
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route
           path="/profile/:username"
           element={

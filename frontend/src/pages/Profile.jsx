@@ -37,7 +37,7 @@ export default function Profile() {
       }
 
       try {
-        const res = await fetch(`http://localhost:5000/api/user/${targetUsername}`);
+        const res = await fetch(`http://localhost:5001/api/user/${targetUsername}`);
         if (res.ok) {
           const data = await res.json();
           setProfileUser(data.user);

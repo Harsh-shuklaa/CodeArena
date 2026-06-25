@@ -26,7 +26,7 @@ export default function Dashboard() {
 
     const fetchUserStats = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/api/user/${user.username}`);
+        const res = await fetch(`http://localhost:5001/api/user/${user.username}`);
         if (res.ok) {
           const data = await res.json();
           updateProfile({

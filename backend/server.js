@@ -1,17 +1,17 @@
-import express from "express";
-import http from "http";
-import { Server } from "socket.io";
-import cors from "cors";
-import dotenv from "dotenv";
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+const dotenv = require("dotenv");
 
-import { connectDB } from "./config/db.js";
-import { handleSocketConnections } from "./socket/socketHandler.js";
+const { connectDB } = require("./config/db.js");
+const { handleSocketConnections } = require("./socket/socketHandler.js");
 
 // Routes imports
-import authRoutes from "./routes/auth.js";
-import userRoutes from "./routes/user.js";
-import problemRoutes from "./routes/problem.js";
-import matchRoutes from "./routes/match.js";
+const authRoutes = require("./routes/auth.js");
+const userRoutes = require("./routes/user.js");
+const problemRoutes = require("./routes/problem.js");
+const matchRoutes = require("./routes/match.js");
 
 dotenv.config();
 

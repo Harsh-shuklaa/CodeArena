@@ -9,11 +9,12 @@ export default function Leaderboard() {
   const [filterQuery, setFilterQuery] = useState("");
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [seasonOnly, setSeasonOnly] = useState(true);
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/user/leaderboard");
+        const res = await fetch("http://localhost:5001/api/user/leaderboard");
         if (res.ok) {
           const data = await res.json();
           setLeaderboardData(data);

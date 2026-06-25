@@ -1,477 +1,465 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { Swords, Play, Zap, ShieldAlert, Cpu, History, Trophy, Users, Check, ChevronDown, Send } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Swords, Play, Zap, Trophy, Shield, Cpu, Terminal, Users, ArrowRight, Activity, Calendar } from "lucide-react";
 import BackgroundShader from "../components/BackgroundShader";
 
 export default function Landing() {
-  const [onlineUsers, setOnlineUsers] = useState(24582);
-  const [alias, setAlias] = useState("cyber_samurai");
-  const [selectedClass, setSelectedClass] = useState("Algorithms");
-  const [activeFaq, setActiveFaq] = useState(null);
-  const [formSubmitted, setFormSubmitted] = useState(false);
+  const navigate = useNavigate();
 
-  // Stats ticking effect
+  // Timer state for Live Match preview
+  const [timer, setTimer] = useState({ h: 3, m: 45, s: 12 });
+
   useEffect(() => {
     const interval = setInterval(() => {
-      setOnlineUsers((prev) => prev + Math.floor(Math.random() * 9) - 4);
-    }, 4000);
+      setTimer((prev) => {
+        let { h, m, s } = prev;
+        s--;
+        if (s < 0) {
+          s = 59;
+          m--;
+        }
+        if (m < 0) {
+          m = 59;
+          h--;
+        }
+        if (h < 0) {
+          // Reset timer
+          h = 3;
+          m = 45;
+          s = 12;
+        }
+        return { h, m, s };
+      });
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const features = [
-    {
-      icon: <Zap className="w-6 h-6 text-secondary" />,
-      title: "Matchmaking in Seconds",
-      desc: "Our intelligent Elo-based matchmaking engine pairs you with coders of similar skill level instantly. No long lobbies, no waiting.",
-    },
-    {
-      icon: <ShieldAlert className="w-6 h-6 text-primary" />,
-      title: "Anti-Cheat System",
-      desc: "Next-gen anti-cheat using advanced code AST analysis, tab-out monitoring, and secondary device detection. Keep coding fair.",
-    },
-    {
-      icon: <Cpu className="w-6 h-6 text-secondary" />,
-      title: "Sandboxed Execution",
-      desc: "All submissions run instantly on isolated, secure environments across 20+ programming languages, providing sub-millisecond execution times.",
-    },
-    {
-      icon: <History className="w-6 h-6 text-primary" />,
-      title: "Visual Code Playback",
-      desc: "Analyze every single keystroke. Watch frame-by-frame playbacks of your opponent's matches to learn their strategies and shortcuts.",
-    },
-    {
-      icon: <Trophy className="w-6 h-6 text-secondary" />,
-      title: "Weekly Cups & Prizes",
-      desc: "Participate in sponsored tournaments with cash prizes and global sponsorships. Prove your value to tech recruiters worldwide.",
-    },
-    {
-      icon: <Users className="w-6 h-6 text-primary" />,
-      title: "Guilds & Clan Wars",
-      desc: "Assemble a team of developers, challenge rival guilds, and conquer seasonal leaderboards in team battles.",
-    },
-  ];
-
-  const classOptions = [
-    {
-      name: "Algorithms",
-      rating: "1820",
-      stat1Label: "Speed",
-      stat1Val: "95%",
-      stat2Label: "Logic",
-      stat2Val: "98%",
-      badge: "Grandmaster Class",
-      desc: "Algorithmic Master",
-    },
-    {
-      name: "Systems",
-      rating: "1750",
-      stat1Label: "Memory",
-      stat1Val: "99%",
-      stat2Label: "Safety",
-      stat2Val: "94%",
-      badge: "Systems Engineer",
-      desc: "Systems Guru",
-    },
-    {
-      name: "Frontend",
-      rating: "1650",
-      stat1Label: "Layout",
-      stat1Val: "98%",
-      stat2Label: "CSS Art",
-      stat2Val: "92%",
-      badge: "Pixel Wizard",
-      desc: "CSS Ninja",
-    },
-  ];
-
-  const currentClassData = classOptions.find((c) => c.name === selectedClass) || classOptions[0];
-
-  const faqs = [
-    {
-      q: "How is code correctness verified in real-time?",
-      a: "Every time you press submit (or when autosave runs), your code is sent to our sandboxed cloud executors. We execute your code against custom visible and hidden test cases, checking runtime performance, memory usage, and structural constraints in real-time.",
-    },
-    {
-      q: "What languages are supported on CodeArena?",
-      a: "We support all major languages including Python 3, JavaScript (Node.js), C++, Java, Rust, Go, TypeScript, C#, Kotlin, Swift, Ruby, and many more. Our IDE comes equipped with autocomplete and linting for all major options.",
-    },
-    {
-      q: "How does the ELO rating system work?",
-      a: "Our system uses an adapted Chess Elo rating system. When you win a duel, you gain rating points depending on your opponent's rating. If you defeat a higher-rated player, you gain more points. Matchmaking matches you with users within 100 Elo points to ensure fair play.",
-    },
-    {
-      q: "Can recruiters really see my profile?",
-      a: "Yes! We partner with top tech companies looking for fast, efficient, and logical engineers. With a Grandmaster tier or verified profile, you can choose to make your stats and past match replays visible to vetted recruiters seeking programming talent.",
-    },
-  ];
+  const formatTimeVal = (val) => String(val).padStart(2, "0");
 
   return (
-    <div className="pt-20 min-h-screen relative overflow-hidden">
+    <div className="pt-20 min-h-screen relative overflow-hidden bg-[#131318] text-[#e4e1e9]">
       <BackgroundShader />
       <div className="fixed inset-0 z-[-2] grid-bg opacity-30 pointer-events-none"></div>
 
       {/* Hero Section */}
-      <section className="relative px-6 md:px-12 py-16 md:py-28 max-w-[1440px] mx-auto text-center z-10">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs font-bold text-primary tracking-wider mb-6 animate-pulse">
-          <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
-          SEASON 4 IS NOW LIVE
-        </div>
+      <section className="relative min-h-screen flex items-center overflow-hidden py-12">
+        <div className="relative z-10 max-w-[1440px] mx-auto px-6 md:px-12 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div className="space-y-8 text-left">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
+              <Zap className="text-primary w-4 h-4 animate-pulse" />
+              <span className="font-label-caps text-xs text-primary font-mono tracking-wider">Season 4 Now Live</span>
+            </div>
+            
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight font-display-lg text-white leading-tight">
+              Where Coders <br />{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-secondary to-primary drop-shadow-[0_0_20px_rgba(221,183,255,0.3)]">
+                Battle For Glory
+              </span>
+            </h1>
 
-        <h1 className="text-4xl md:text-6xl font-black tracking-tight font-display-lg text-white max-w-4xl mx-auto leading-tight">
-          The Ultimate <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary drop-shadow-[0_0_30px_rgba(221,183,255,0.3)]">1v1 Coding</span> Battleground
-        </h1>
+            <p className="text-base md:text-lg text-on-surface-variant font-body-md max-w-lg leading-relaxed">
+              Challenge developers in real-time coding duels. Solve problems faster, climb the leaderboard, and prove you're the ultimate programmer.
+            </p>
 
-        <p className="text-base md:text-lg text-on-surface-variant font-body-md max-w-2xl mx-auto mt-6 leading-relaxed">
-          Duel players worldwide in real-time coding matches. Solve algorithmic challenges, test speed, optimization, and edge cases, and climb the ranks from Bronze to Grandmaster.
-        </p>
-
-        <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mt-10">
-          <Link
-            to="/signup"
-            className="w-full sm:w-auto px-8 py-4 bg-primary text-on-primary rounded font-bold hover:shadow-[0_0_35px_rgba(221,183,255,0.6)] hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 text-base"
-          >
-            <Swords className="w-5 h-5" /> Enter Arena Free
-          </Link>
-          <Link
-            to="/battle/demo-match"
-            className="w-full sm:w-auto px-8 py-4 bg-surface/50 text-white rounded font-bold border border-white/10 hover:bg-surface/85 hover:border-white/20 transition-all duration-300 flex items-center justify-center gap-2 text-base backdrop-blur"
-          >
-            <Play className="w-5 h-5" /> Watch Live Battle
-          </Link>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto mt-20 p-8 glass-panel rounded-2xl relative">
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-3xl md:text-4xl font-extrabold text-white font-display-lg">
-              {onlineUsers.toLocaleString()}
-            </span>
-            <span className="text-xs text-on-surface-variant tracking-wider uppercase mt-2">Coders Online</span>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={() => navigate("/matchmaking")}
+                className="px-8 py-4 bg-gradient-to-r from-primary to-secondary text-on-primary font-bold tracking-wider rounded-lg shadow-[0_0_25px_rgba(221,183,255,0.35)] hover:shadow-[0_0_35px_rgba(221,183,255,0.6)] active:scale-95 transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                <span>Start Battle</span>
+                <Swords className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => navigate("/battle/demo-match")}
+                className="px-8 py-4 border border-secondary/40 text-secondary font-semibold rounded-lg bg-secondary/5 hover:bg-secondary/15 hover:border-secondary transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                <span>Watch Live Matches</span>
+                <Play className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="hidden md:block w-[1px] h-12 bg-white/10 self-center justify-self-center"></div>
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-3xl md:text-4xl font-extrabold text-white font-display-lg">1.8M+</span>
-            <span className="text-xs text-on-surface-variant tracking-wider uppercase mt-2">Matches Completed</span>
+
+          <div className="relative">
+            <div className="glass-panel p-2 rounded-xl border border-white/10 shadow-2xl relative z-20 overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-secondary/10 pointer-events-none"></div>
+              <img
+                className="w-full rounded-lg shadow-inner object-cover"
+                alt="A futuristic 3D mockup of a coding battlefield arena on a holographic display."
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDesgmGM0mp4buXeGeQAQ2wyBMC3YapRg_0c2EVUv8T58we0OFMkbBnLgbkxTLP1R03UWTKY8cJCrpPmu4nmEZvQJXco5OaEsfH0yJOwBcudxshSA8DhwPWiqojb-n6y_BmnL5ggzBy0yVhOctZk4jJbsnZB_fl_D5Jk0W15CdGttIUaEoJ2DCVH17HoSmzGa95lrPGBLAfAbviRDmYcWpeQuO4oPz0ga98DcNMirVLXGakwLUfNYwrgTHAz2SrR2nRdPl0T3jbg"
+              />
+              
+              {/* Floating HUD Element */}
+              <div className="absolute -top-4 -right-4 glass-panel p-4 rounded-lg border border-primary/30 shadow-[0_0_20px_rgba(221,183,255,0.15)] animate-bounce" style={{ animationDuration: "3s" }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center border border-primary">
+                    <Trophy className="text-primary w-5 h-5" />
+                  </div>
+                  <div className="text-left font-mono">
+                    <p className="text-[10px] text-on-surface-variant font-bold">Global Rank</p>
+                    <p className="text-lg font-black text-white">#124</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Glow behind image */}
+            <div className="absolute inset-0 bg-primary/20 blur-[120px] -z-10"></div>
           </div>
-          <div className="hidden md:block w-[1px] h-12 bg-white/10 self-center justify-self-center"></div>
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-3xl md:text-4xl font-extrabold text-white font-display-lg">150+</span>
-            <span className="text-xs text-on-surface-variant tracking-wider uppercase mt-2">Supported Languages</span>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-16 border-y border-outline-variant/20 bg-surface-container-lowest/80">
+        <div className="max-w-[1440px] mx-auto px-6 md:px-12">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="text-center group">
+              <p className="text-4xl md:text-5xl font-black text-primary group-hover:scale-110 transition-transform font-display-lg">50k+</p>
+              <p className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-2 font-mono">Battles Played</p>
+            </div>
+            <div className="text-center group">
+              <p className="text-4xl md:text-5xl font-black text-secondary group-hover:scale-110 transition-transform font-display-lg">20k+</p>
+              <p className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-2 font-mono">Elite Coders</p>
+            </div>
+            <div className="text-center group">
+              <p className="text-4xl md:text-5xl font-black text-primary group-hover:scale-110 transition-transform font-display-lg">100+</p>
+              <p className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-2 font-mono">Daily Matches</p>
+            </div>
+            <div className="text-center group">
+              <p className="text-4xl md:text-5xl font-black text-secondary group-hover:scale-110 transition-transform font-display-lg">99.9%</p>
+              <p className="text-[10px] md:text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-2 font-mono">Uptime</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="relative px-6 md:px-12 py-16 md:py-24 max-w-[1440px] mx-auto z-10 border-t border-white/5">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold font-display-lg text-white">Engineered For Competitors</h2>
-          <p className="text-sm md:text-base text-on-surface-variant font-body-md max-w-xl mx-auto mt-3">
-            Experience a cutting-edge platform designed to offer lag-free matchmaking, secure code execution, and high-fidelity stats tracking.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {features.map((feat, i) => (
-            <div
-              key={i}
-              className="p-8 glass-panel rounded-xl hover:border-primary/50 hover:shadow-[0_0_30px_rgba(221,183,255,0.1)] transition-all duration-300 group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center border border-white/10 group-hover:border-primary/40 group-hover:bg-primary/5 transition-all">
-                {feat.icon}
-              </div>
-              <h3 className="text-xl font-bold text-white mt-6 font-headline-md">{feat.title}</h3>
-              <p className="text-sm text-on-surface-variant leading-relaxed mt-3">{feat.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Alias Generator Section */}
-      <section className="relative px-6 md:px-12 py-16 md:py-24 max-w-[1440px] mx-auto z-10 border-t border-white/5">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          {/* Left: Input Form */}
-          <div className="space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold font-display-lg text-white">Claim Your Coding Persona</h2>
-            <p className="text-sm md:text-base text-on-surface-variant max-w-lg leading-relaxed">
-              Enter your username and select your core class to generate your personalized CodeArena player card.
+      <section className="py-24">
+        <div className="max-w-[1440px] mx-auto px-6 md:px-12">
+          <div className="text-center mb-16 space-y-4">
+            <h2 className="text-3xl md:text-4xl font-extrabold text-white font-display-lg">The Developer's Combat Deck</h2>
+            <p className="text-on-surface-variant max-w-xl mx-auto text-sm md:text-base">
+              Engineered for speed, precision, and the ultimate competitive experience.
             </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
-                  Enter Coding Alias
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-mono font-bold">&gt;_</span>
-                  <input
-                    type="text"
-                    value={alias}
-                    onChange={(e) => setAlias(e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 15))}
-                    placeholder="e.g. cyber_samurai"
-                    className="w-full pl-10 pr-4 py-3 bg-surface-container rounded border border-white/10 focus:border-primary focus:outline-none text-white font-mono text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">
-                  Select Your Class
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {classOptions.map((opt) => (
-                    <button
-                      key={opt.name}
-                      onClick={() => setSelectedClass(opt.name)}
-                      className={`py-3 rounded border font-semibold text-xs transition-all flex flex-col items-center gap-1 ${
-                        selectedClass === opt.name
-                          ? "bg-primary/10 border-primary text-primary"
-                          : "bg-surface-container/50 border-white/5 text-on-surface-variant hover:border-white/20"
-                      }`}
-                    >
-                      {opt.name === "Algorithms" && <Zap className="w-4 h-4" />}
-                      {opt.name === "Systems" && <Cpu className="w-4 h-4" />}
-                      {opt.name === "Frontend" && <Users className="w-4 h-4" />}
-                      {opt.desc}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Link
-                to={`/signup?alias=${alias}&class=${selectedClass}`}
-                className="w-full block py-4 text-center bg-primary text-on-primary rounded font-bold hover:shadow-[0_0_25px_rgba(221,183,255,0.4)] transition-all mt-4"
-              >
-                Register Arena Account
-              </Link>
-            </div>
           </div>
-
-          {/* Right: Card Preview */}
-          <div className="flex justify-center">
-            <div className="relative w-80 h-[420px] rounded-2xl glass-panel p-6 overflow-hidden border border-white/10 flex flex-col justify-between shadow-[0_0_50px_rgba(168,85,247,0.15)] group hover:border-primary/50 transition-all duration-500">
-              <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
-
-              <div className="flex justify-between items-center z-10">
-                <span className="px-2 py-0.5 rounded bg-primary/20 text-[10px] font-bold text-primary font-mono tracking-wider">
-                  {currentClassData.badge}
-                </span>
-                <span className="font-mono text-sm text-secondary font-bold">{currentClassData.rating} ELO</span>
-              </div>
-
-              <div className="flex flex-col items-center z-10 mt-4">
-                <div className="w-24 h-24 rounded-full border-2 border-primary/40 bg-surface-container overflow-hidden flex items-center justify-center p-2 mb-4 group-hover:scale-105 transition-transform duration-300">
-                  <img
-                    src={`https://api.dicebear.com/7.x/bottts/svg?seed=${alias || "codearena"}`}
-                    alt="User Avatar"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <h4 className="text-xl font-bold font-display-lg text-white tracking-wide">
-                  {alias || "cyber_samurai"}
-                </h4>
-              </div>
-
-              <div className="space-y-3 z-10 mt-6 bg-[#0d0d12]/60 p-4 rounded-xl border border-white/5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-on-surface-variant font-medium">Specialty</span>
-                  <span className="text-white font-semibold font-mono">{currentClassData.name}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-on-surface-variant font-medium">{currentClassData.stat1Label}</span>
-                  <span className="text-secondary font-semibold font-mono">{currentClassData.stat1Val}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-on-surface-variant font-medium">{currentClassData.stat2Label}</span>
-                  <span className="text-primary font-semibold font-mono">{currentClassData.stat2Val}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center text-[10px] text-on-surface-variant font-mono mt-4 z-10 border-t border-white/5 pt-3">
-                <span>SYSTEM INITIALIZED</span>
-                <span className="text-green-400 animate-pulse flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full"></span> ONLINE
-                </span>
-              </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+            {/* Feature 1 */}
+            <div className="glass-panel p-8 rounded-xl border-l-4 border-l-primary hover:-translate-y-2 transition-all duration-300 relative group overflow-hidden">
+              <div className="scanner-effect absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <Swords className="text-primary w-10 h-10 mb-6" />
+              <h3 className="text-lg font-bold text-white mb-3 font-headline-md">Real-Time Battles</h3>
+              <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
+                Head-to-head coding challenges with instant synchronization and peer monitoring.
+              </p>
+            </div>
+            {/* Feature 2 */}
+            <div className="glass-panel p-8 rounded-xl border-l-4 border-l-secondary hover:-translate-y-2 transition-all duration-300 group overflow-hidden">
+              <Activity className="text-secondary w-10 h-10 mb-6" />
+              <h3 className="text-lg font-bold text-white mb-3 font-headline-md">AI Matchmaking</h3>
+              <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
+                Advanced algorithms ensure you're always fighting opponents at your exact skill level.
+              </p>
+            </div>
+            {/* Feature 3 */}
+            <div className="glass-panel p-8 rounded-xl border-l-4 border-l-primary hover:-translate-y-2 transition-all duration-300 group overflow-hidden">
+              <Cpu className="text-primary w-10 h-10 mb-6" />
+              <h3 className="text-lg font-bold text-white mb-3 font-headline-md">Live Execution</h3>
+              <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
+                Blazing fast compilers execute your code across 20+ languages in milliseconds.
+              </p>
+            </div>
+            {/* Feature 4 */}
+            <div className="glass-panel p-8 rounded-xl border-l-4 border-l-secondary hover:-translate-y-2 transition-all duration-300 group overflow-hidden">
+              <Trophy className="text-secondary w-10 h-10 mb-6" />
+              <h3 className="text-lg font-bold text-white mb-3 font-headline-md">Global Rank</h3>
+              <p className="text-on-surface-variant text-xs md:text-sm leading-relaxed">
+                Climb from Bronze to Legend status and earn unique badges for your profile.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="relative px-6 md:px-12 py-16 md:py-24 max-w-[1440px] mx-auto z-10 border-t border-white/5">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold font-display-lg text-white">Upgrade Your Gear</h2>
-          <p className="text-sm md:text-base text-on-surface-variant font-body-md max-w-xl mx-auto mt-3">
-            Start for free and unlock advanced analytics, customizable arenas, and priority matchmaking as you level up.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Card 1 */}
-          <div className="p-8 glass-panel rounded-xl flex flex-col justify-between hover:border-white/20 transition-all duration-300">
+      {/* Live Match HUD Preview */}
+      <section className="py-24 bg-surface-container/60 relative">
+        <div className="max-w-[1440px] mx-auto px-6 md:px-12">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6 text-left">
             <div>
-              <span className="text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">RECRUIT</span>
-              <h3 className="text-2xl font-bold text-white mt-2">Initiate</h3>
-              <div className="text-4xl font-extrabold text-white mt-4">$0 <span className="text-xs text-on-surface-variant font-normal">/forever</span></div>
-              <p className="text-xs text-on-surface-variant mt-4">Perfect for casual practice and introductory duels.</p>
-              <ul className="space-y-3 mt-6 text-sm text-on-surface-variant">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> 5 Ranked Duels per day</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Access to 10 Languages</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Global Public Chat</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Standard Matchmaking</li>
-              </ul>
+              <div className="flex items-center gap-2 text-error mb-2 animate-pulse">
+                <span className="w-2.5 h-2.5 rounded-full bg-error"></span>
+                <span className="font-label-caps text-xs tracking-wider font-mono font-bold">LIVE NOW</span>
+              </div>
+              <h2 className="text-2xl md:text-3xl font-extrabold text-white font-display-lg">Match #8,294: Global Semifinals</h2>
             </div>
-            <Link to="/signup" className="w-full mt-8 py-3 text-center bg-surface/50 text-white rounded font-bold border border-white/10 hover:bg-surface/80 transition-all text-sm">
-              Get Started
-            </Link>
+            
+            <div className="glass-panel px-6 py-2.5 rounded-full border border-primary/30 font-code-sm text-primary flex items-center gap-3 font-mono text-sm">
+              <Calendar className="w-4 h-4" />
+              <span>{formatTimeVal(timer.h)}:{formatTimeVal(timer.m)}:{formatTimeVal(timer.s)}</span>
+            </div>
           </div>
 
-          {/* Card 2 */}
-          <div className="p-8 glass-panel rounded-xl flex flex-col justify-between border-primary/40 relative hover:border-primary transition-all duration-300 shadow-[0_0_30px_rgba(168,85,247,0.1)]">
-            <span className="absolute top-0 right-6 -translate-y-1/2 px-3 py-1 rounded-full bg-primary text-[10px] font-bold text-on-primary uppercase tracking-wider">
-              MOST POPULAR
-            </span>
-            <div>
-              <span className="text-[10px] font-bold text-primary tracking-wider uppercase">WARRIOR</span>
-              <h3 className="text-2xl font-bold text-white mt-2">Pro Duelist</h3>
-              <div className="text-4xl font-extrabold text-white mt-4">$9 <span className="text-xs text-on-surface-variant font-normal">/month</span></div>
-              <p className="text-xs text-on-surface-variant mt-4">For serious competitors who want to climb the ladder fast.</p>
-              <ul className="space-y-3 mt-6 text-sm text-on-surface-variant">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-primary shrink-0" /> Unlimited Ranked Duels</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-primary shrink-0" /> Access to all 20+ Languages</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-primary shrink-0" /> Advanced IDE Auto-complete</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-primary shrink-0" /> Detailed Code Analytics</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-primary shrink-0" /> Priority Matchmaking</li>
-              </ul>
-            </div>
-            <Link to="/signup" className="w-full mt-8 py-3 text-center bg-primary text-on-primary rounded font-bold hover:shadow-[0_0_20px_rgba(221,183,255,0.4)] transition-all text-sm">
-              Unlock Pro
-            </Link>
-          </div>
-
-          {/* Card 3 */}
-          <div className="p-8 glass-panel rounded-xl flex flex-col justify-between hover:border-white/20 transition-all duration-300">
-            <div>
-              <span className="text-[10px] font-bold text-on-surface-variant tracking-wider uppercase">ELITE</span>
-              <h3 className="text-2xl font-bold text-white mt-2">Grandmaster</h3>
-              <div className="text-4xl font-extrabold text-white mt-4">$29 <span className="text-xs text-on-surface-variant font-normal">/month</span></div>
-              <p className="text-xs text-on-surface-variant mt-4">Designed for guilds, professional teams, and job seekers.</p>
-              <ul className="space-y-3 mt-6 text-sm text-on-surface-variant">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Everything in Pro</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Private Custom Lobbies</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Verified Recruiter Profile Badge</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Direct Application to Sponsors</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-secondary shrink-0" /> Custom Avatar & Custom Styles</li>
-              </ul>
-            </div>
-            <Link to="/signup" className="w-full mt-8 py-3 text-center bg-surface/50 text-white rounded font-bold border border-white/10 hover:bg-surface/80 transition-all text-sm">
-              Join Elite Tier
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section id="faq" className="relative px-6 md:px-12 py-16 md:py-24 max-w-[1440px] mx-auto z-10 border-t border-white/5">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold font-display-lg text-white">Frequently Answered Queries</h2>
-          <p className="text-sm md:text-base text-on-surface-variant font-body-md max-w-xl mx-auto mt-3">
-            Everything you need to know about matchmaking, execution, and tournament structures.
-          </p>
-        </div>
-
-        <div className="max-w-3xl mx-auto space-y-4">
-          {faqs.map((faq, idx) => {
-            const isOpen = activeFaq === idx;
-            return (
-              <div key={idx} className="glass-panel rounded-xl overflow-hidden border border-white/5 transition-all">
-                <button
-                  onClick={() => setActiveFaq(isOpen ? null : idx)}
-                  className="w-full p-6 text-left flex justify-between items-center font-semibold text-white hover:text-primary transition-colors focus:outline-none"
-                >
-                  <span>{faq.q}</span>
-                  <ChevronDown className={`w-5 h-5 text-on-surface-variant transform transition-transform duration-200 ${isOpen ? "rotate-180 text-primary" : ""}`} />
-                </button>
-                {isOpen && (
-                  <div className="px-6 pb-6 text-sm text-on-surface-variant leading-relaxed border-t border-white/5 pt-4 animate-fade-in">
-                    {faq.a}
+          <div className="grid grid-cols-1 lg:grid-cols-2 bg-[#1b1b20]/30 rounded-2xl overflow-hidden border border-white/5 shadow-xl text-left">
+            {/* Player A */}
+            <div className="bg-[#131318]/90 p-8 relative border-b lg:border-b-0 lg:border-r border-white/5">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded bg-primary/20 flex items-center justify-center font-bold text-primary border border-primary/50 text-lg font-mono">A</div>
+                  <div>
+                    <p className="text-lg font-extrabold text-white font-display-lg">Player_Alpha</p>
+                    <p className="font-code-sm text-secondary text-xs font-mono">Level 82 Wizard</p>
                   </div>
-                )}
+                </div>
+                <p className="text-3xl font-bold text-primary font-display-lg">78%</p>
               </div>
-            );
-          })}
+              
+              <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden relative">
+                <div className="absolute top-0 left-0 h-full bg-primary" style={{ width: "78%" }}></div>
+              </div>
+              
+              <div className="mt-8 p-4 rounded-lg bg-surface-container-lowest/80 border border-white/5 font-mono text-xs text-on-surface-variant overflow-x-auto">
+                <pre><code>{`function solve(n) {
+  return Array.from({length: n}, 
+    (_, i) => i).reduce((a, b) => ...`}</code></pre>
+              </div>
+            </div>
+
+            {/* Player B */}
+            <div className="bg-[#131318]/90 p-8 relative">
+              <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded bg-secondary/20 flex items-center justify-center font-bold text-secondary border border-secondary/50 text-lg font-mono">B</div>
+                  <div>
+                    <p className="text-lg font-extrabold text-white font-display-lg">Binary_Beast</p>
+                    <p className="font-code-sm text-primary text-xs font-mono">Level 79 Ninja</p>
+                  </div>
+                </div>
+                <p className="text-3xl font-bold text-secondary font-display-lg">64%</p>
+              </div>
+
+              <div className="w-full h-2 bg-surface-container rounded-full overflow-hidden relative">
+                <div className="absolute top-0 left-0 h-full bg-secondary" style={{ width: "64%" }}></div>
+              </div>
+
+              <div className="mt-8 p-4 rounded-lg bg-surface-container-lowest/80 border border-white/5 font-mono text-xs text-on-surface-variant overflow-x-auto">
+                <pre><code>{`const compute = (data) => {
+  const result = data.map(item => {
+    return calculate(item)...`}</code></pre>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Newsletter / Contact Section */}
-      <section className="relative px-6 md:px-12 py-16 md:py-24 max-w-[1440px] mx-auto z-10 border-t border-white/5">
-        <div className="glass-panel p-8 md:p-12 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h3 className="text-2xl md:text-3xl font-bold font-display-lg text-white">Stay Up to Date</h3>
-            <p className="text-sm text-on-surface-variant mt-3 max-w-md leading-relaxed font-body-md">
-              Subscribe to our newsletter for patch updates, custom tournament alerts, and new challenge notifications.
+      {/* How It Works */}
+      <section className="py-24">
+        <div className="max-w-4xl mx-auto px-6 md:px-12 text-center">
+          <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-20 font-display-lg">The Path To Victory</h2>
+          
+          <div className="relative">
+            <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-gradient-to-b from-primary via-secondary to-transparent hidden md:block -translate-x-1/2"></div>
+            
+            <div className="space-y-16">
+              {/* Step 1 */}
+              <div className="relative flex flex-col md:flex-row items-center gap-12 text-left md:text-right group">
+                <div className="md:w-1/2 md:pr-6">
+                  <h3 className="text-xl font-bold text-primary font-headline-md mb-2">01. Match Found</h3>
+                  <p className="text-on-surface-variant text-sm md:text-base">
+                    Our matchmaking engine pairs you with a worthy adversary in under 5 seconds.
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-[#131318] border-4 border-primary flex items-center justify-center z-10 font-bold font-mono group-hover:scale-110 transition-transform">1</div>
+                <div className="md:w-1/2"></div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="relative flex flex-col md:flex-row-reverse items-center gap-12 text-left group">
+                <div className="md:w-1/2 md:pl-6">
+                  <h3 className="text-xl font-bold text-secondary font-headline-md mb-2">02. Solve Challenge</h3>
+                  <p className="text-on-surface-variant text-sm md:text-base">
+                    Race against the clock to implement the most efficient solution to a complex algorithmic problem.
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-[#131318] border-4 border-secondary flex items-center justify-center z-10 font-bold font-mono group-hover:scale-110 transition-transform">2</div>
+                <div className="md:w-1/2"></div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="relative flex flex-col md:flex-row items-center gap-12 text-left md:text-right group">
+                <div className="md:w-1/2 md:pr-6">
+                  <h3 className="text-xl font-bold text-primary font-headline-md mb-2">03. Winner Declared</h3>
+                  <p className="text-on-surface-variant text-sm md:text-base">
+                    Validation happens instantly. Gain XP, climb the ranks, and earn your rewards.
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-[#131318] border-4 border-primary flex items-center justify-center z-10 font-bold font-mono group-hover:scale-110 transition-transform">3</div>
+                <div className="md:w-1/2"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Leaderboard Standings Preview */}
+      <section className="py-24 bg-surface-container-low/70">
+        <div className="max-w-[1440px] mx-auto px-6 md:px-12">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 text-left">
+            <div className="lg:col-span-1 flex flex-col justify-center space-y-6">
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white leading-tight font-display-lg">Arena Legends</h2>
+              <p className="text-on-surface-variant text-sm md:text-base">
+                The top 1% who have mastered the arena. Do you have what it takes to join them?
+              </p>
+              <button
+                onClick={() => navigate("/leaderboard")}
+                className="font-bold font-mono text-sm text-secondary hover:text-cyan-400 flex items-center gap-2 group tracking-widest"
+              >
+                <span>VIEW FULL LEADERBOARD</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+              </button>
+            </div>
+            
+            <div className="lg:col-span-2 space-y-4">
+              {/* Rank 1 */}
+              <div className="glass-panel p-6 rounded-xl flex items-center justify-between border border-primary/30 shadow-[0_0_20px_rgba(221,183,255,0.1)]">
+                <div className="flex items-center gap-6">
+                  <span className="text-3xl font-extrabold text-primary font-mono opacity-65">01</span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center text-primary text-xl border border-primary/30">
+                      <Shield className="w-5 h-5 fill-primary" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-white font-display-lg">null_pointer_ex</p>
+                      <p className="text-xs text-secondary font-mono">Level 99 • 15.4k Wins</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right font-mono">
+                  <p className="text-[10px] text-primary font-bold">MMR</p>
+                  <p className="text-lg font-extrabold text-white">4,892</p>
+                </div>
+              </div>
+
+              {/* Rank 2 */}
+              <div className="glass-panel p-6 rounded-xl flex items-center justify-between border border-white/5">
+                <div className="flex items-center gap-6">
+                  <span className="text-3xl font-extrabold text-secondary font-mono opacity-65">02</span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center text-secondary text-xl border border-secondary/30">
+                      <Cpu className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-white font-display-lg">stack_king</p>
+                      <p className="text-xs text-primary font-mono">Level 95 • 12.1k Wins</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right font-mono">
+                  <p className="text-[10px] text-secondary font-bold">MMR</p>
+                  <p className="text-lg font-extrabold text-white">4,521</p>
+                </div>
+              </div>
+
+              {/* Rank 3 */}
+              <div className="glass-panel p-6 rounded-xl flex items-center justify-between border border-white/5">
+                <div className="flex items-center gap-6">
+                  <span className="text-3xl font-extrabold text-on-surface-variant font-mono opacity-30">03</span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center text-on-surface-variant text-xl border border-white/10">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-white font-display-lg">code_bender</p>
+                      <p className="text-xs text-secondary font-mono">Level 92 • 10.8k Wins</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right font-mono">
+                  <p className="text-[10px] text-on-surface-variant font-bold">MMR</p>
+                  <p className="text-lg font-extrabold text-white">4,210</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Tournament CTA */}
+      <section className="py-24 px-6">
+        <div className="max-w-[1440px] mx-auto">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 p-12 md:p-24 text-center">
+            <div className="absolute inset-0 bg-[#0d0d12]/40 backdrop-blur-sm -z-10"></div>
+            <div className="relative z-10 space-y-8">
+              <h2 className="text-4xl md:text-6xl font-extrabold text-white font-display-lg leading-tight">
+                Ready To Become The <br />Coding Champion?
+              </h2>
+              <p className="text-lg md:text-xl text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
+                The winter tournament begins in 48 hours. $10,000 prize pool. Elite glory awaits.
+              </p>
+              <button
+                onClick={() => navigate("/signup")}
+                className="px-12 py-5 bg-white text-black font-bold font-mono text-xs tracking-widest rounded-xl shadow-[0_0_30px_rgba(255,255,255,0.25)] hover:bg-primary hover:text-white hover:shadow-[0_0_35px_rgba(221,183,255,0.6)] hover:scale-105 active:scale-95 transition-all duration-300"
+              >
+                JOIN TOURNAMENT
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-surface-container-lowest/80 border-t border-outline-variant/30 w-full py-12 text-left font-mono">
+        <div className="max-w-[1440px] mx-auto px-6 md:px-12 grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="space-y-4">
+            <div className="text-xl font-bold text-white font-display-lg">CodeArena</div>
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              Elite Performance Engineering for the next generation of software masters.
             </p>
-            <div className="mt-8 space-y-3 font-mono text-xs text-on-surface-variant">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-[18px]">mail</span>
-                <span>support@codearena.dev</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-[18px]">map-pin</span>
-                <span>Cyberspace, Node #8892</span>
-              </div>
+            <div className="flex gap-4">
+              <a href="#" className="w-10 h-10 rounded bg-[#1f1f24] border border-white/5 flex items-center justify-center hover:text-secondary hover:border-secondary transition-colors">
+                <Activity className="w-4 h-4" />
+              </a>
+              <a href="#" className="w-10 h-10 rounded bg-[#1f1f24] border border-white/5 flex items-center justify-center hover:text-secondary hover:border-secondary transition-colors">
+                <Terminal className="w-4 h-4" />
+              </a>
+              <a href="#" className="w-10 h-10 rounded bg-[#1f1f24] border border-white/5 flex items-center justify-center hover:text-secondary hover:border-secondary transition-colors">
+                <Users className="w-4 h-4" />
+              </a>
             </div>
           </div>
 
           <div>
-            {formSubmitted ? (
-              <div className="p-6 bg-primary/10 border border-primary/20 rounded-xl text-center">
-                <span className="material-symbols-outlined text-primary text-[36px] mb-2 animate-bounce">check_circle</span>
-                <h4 className="text-lg font-bold text-white font-display-lg">Message Sent Successfully!</h4>
-                <p className="text-xs text-on-surface-variant mt-1">Welcome to the Arena. Check your email for validation.</p>
-              </div>
-            ) : (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setFormSubmitted(true);
-                }}
-                className="space-y-4"
-              >
-                <div>
-                  <input
-                    type="text"
-                    placeholder="Name"
-                    required
-                    className="w-full px-4 py-3 bg-surface-container rounded border border-white/5 focus:border-primary focus:outline-none text-white text-sm"
-                  />
-                </div>
-                <div>
-                  <input
-                    type="email"
-                    placeholder="Email Address"
-                    required
-                    className="w-full px-4 py-3 bg-surface-container rounded border border-white/5 focus:border-primary focus:outline-none text-white text-sm"
-                  />
-                </div>
-                <div>
-                  <textarea
-                    placeholder="Message / Feedback (Optional)"
-                    rows={3}
-                    className="w-full px-4 py-3 bg-surface-container rounded border border-white/5 focus:border-primary focus:outline-none text-white text-sm"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-primary text-on-primary rounded font-bold hover:shadow-[0_0_20px_rgba(221,183,255,0.4)] transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  Submit Inquiry <Send className="w-4 h-4" />
-                </button>
-              </form>
-            )}
+            <h4 className="text-white text-xs font-bold uppercase tracking-wider mb-6">Platform</h4>
+            <ul className="space-y-4 text-xs text-on-surface-variant font-medium">
+              <li><Link to="/matchmaking" className="hover:text-secondary transition-colors">Battles</Link></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">Tournaments</a></li>
+              <li><Link to="/leaderboard" className="hover:text-secondary transition-colors">Leaderboard</Link></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">Challenges</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-white text-xs font-bold uppercase tracking-wider mb-6">Company</h4>
+            <ul className="space-y-4 text-xs text-on-surface-variant font-medium">
+              <li><a href="#" className="hover:text-secondary transition-colors">About</a></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">Careers</a></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">API</a></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">Blog</a></li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-white text-xs font-bold uppercase tracking-wider mb-6">Legal</h4>
+            <ul className="space-y-4 text-xs text-on-surface-variant font-medium">
+              <li><a href="#" className="hover:text-secondary transition-colors">Terms</a></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">Privacy</a></li>
+              <li><a href="#" className="hover:text-secondary transition-colors">Security</a></li>
+            </ul>
           </div>
         </div>
-      </section>
+
+        <div className="max-w-[1440px] mx-auto px-6 md:px-12 mt-12 pt-8 border-t border-outline-variant/10 text-center text-xs text-on-surface-variant">
+          <p>© 2026 CodeArena. Elite Performance Engineering.</p>
+        </div>
+      </footer>
     </div>
   );
 }
