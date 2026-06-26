@@ -1,6 +1,6 @@
 import { useState, useContext, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, Trophy, Swords, LayoutDashboard, RotateCw } from "lucide-react";
+import { Search, Trophy, Swords, LayoutDashboard, RotateCw, Users } from "lucide-react";
 import { UserContext } from "../context/UserContext";
 import BackgroundShader from "../components/BackgroundShader";
 
@@ -37,33 +37,33 @@ export default function Leaderboard() {
   const podium = [
     {
       rank: 2,
-      name: p2 ? p2.username : "SYNTAX_REAPER",
-      elo: `${p2 ? p2.elo : 2840} RP`,
-      wins: p2 ? p2.wins : "1,204",
-      rate: p2 ? `${Math.round((p2.wins / Math.max(1, p2.wins + p2.losses)) * 100)}%` : "68.4%",
-      avatar: p2 ? p2.avatarUrl : "https://api.dicebear.com/7.x/bottts/svg?seed=SyntaxReaper",
+      name: p2 ? p2.username : "VACANT_SLOT",
+      elo: p2 ? `${p2.elo} RP` : "0 RP",
+      wins: p2 ? p2.wins : "0",
+      rate: p2 && (p2.wins + p2.losses) > 0 ? `${Math.round((p2.wins / (p2.wins + p2.losses)) * 100)}%` : "0%",
+      avatar: p2 ? p2.avatarUrl : "https://api.dicebear.com/7.x/bottts/svg?seed=vacant_2",
       borderColor: "border-secondary",
       glowColor: "shadow-[0_0_20px_rgba(76,215,246,0.3)]",
       height: "h-[360px]",
     },
     {
       rank: 1,
-      name: p1 ? p1.username : "NULL_POINTER",
-      elo: `${p1 ? p1.elo : 3120} RP`,
-      wins: p1 ? p1.wins : "1,842",
-      rate: p1 ? `${Math.round((p1.wins / Math.max(1, p1.wins + p1.losses)) * 100)}%` : "74.2%",
-      avatar: p1 ? p1.avatarUrl : "https://api.dicebear.com/7.x/bottts/svg?seed=NullPointer",
+      name: p1 ? p1.username : "VACANT_SLOT",
+      elo: p1 ? `${p1.elo} RP` : "0 RP",
+      wins: p1 ? p1.wins : "0",
+      rate: p1 && (p1.wins + p1.losses) > 0 ? `${Math.round((p1.wins / (p1.wins + p1.losses)) * 100)}%` : "0%",
+      avatar: p1 ? p1.avatarUrl : "https://api.dicebear.com/7.x/bottts/svg?seed=vacant_1",
       borderColor: "border-primary",
       glowColor: "shadow-[0_0_35px_rgba(221,183,255,0.4)]",
       height: "h-[420px]",
     },
     {
       rank: 3,
-      name: p3 ? p3.username : "BINARY_BLAST",
-      elo: `${p3 ? p3.elo : 2650} RP`,
-      wins: p3 ? p3.wins : "945",
-      rate: p3 ? `${Math.round((p3.wins / Math.max(1, p3.wins + p3.losses)) * 100)}%` : "62.1%",
-      avatar: p3 ? p3.avatarUrl : "https://api.dicebear.com/7.x/bottts/svg?seed=BinaryBlast",
+      name: p3 ? p3.username : "VACANT_SLOT",
+      elo: p3 ? `${p3.elo} RP` : "0 RP",
+      wins: p3 ? p3.wins : "0",
+      rate: p3 && (p3.wins + p3.losses) > 0 ? `${Math.round((p3.wins / (p3.wins + p3.losses)) * 100)}%` : "0%",
+      avatar: p3 ? p3.avatarUrl : "https://api.dicebear.com/7.x/bottts/svg?seed=vacant_3",
       borderColor: "border-tertiary",
       glowColor: "shadow-[0_0_20px_rgba(173,198,255,0.3)]",
       height: "h-[320px]",
@@ -126,6 +126,9 @@ export default function Leaderboard() {
               <Link to="/dashboard" className="flex items-center gap-3 text-on-surface-variant hover:text-white pl-4 py-3 hover:bg-white/5 transition-all">
                 <LayoutDashboard className="w-4 h-4" /> Dashboard
               </Link>
+              <Link to="/dashboard?showFriends=true" className="flex items-center gap-3 text-on-surface-variant hover:text-white pl-4 py-3 hover:bg-white/5 transition-all">
+                <Users className="w-4 h-4" /> Friends
+              </Link>
               <Link to="/leaderboard" className="flex items-center gap-3 bg-secondary/15 text-secondary border-l-4 border-secondary pl-3 py-3 font-bold rounded-r">
                 <Trophy className="w-4 h-4" /> Leaderboard
               </Link>
@@ -168,7 +171,9 @@ export default function Leaderboard() {
                 </div>
                 <div className="absolute -bottom-2 -right-2 bg-secondary text-on-secondary w-8 h-8 rounded-full flex items-center justify-center font-bold font-mono">2</div>
               </div>
-              <h3 className="text-base font-bold text-white font-display-lg truncate">{podium[0].name}</h3>
+              <Link to={podium[0].name !== "VACANT_SLOT" ? `/profile/${podium[0].name}` : "#"} className="hover:underline hover:text-secondary">
+                <h3 className="text-base font-bold text-white font-display-lg truncate">{podium[0].name}</h3>
+              </Link>
               <p className="text-xs font-bold text-secondary font-mono mt-1">{podium[0].elo}</p>
               <div className="flex justify-center gap-6 border-t border-white/5 pt-4 mt-4 font-mono text-[10px]">
                 <div>
@@ -191,7 +196,9 @@ export default function Leaderboard() {
                 </div>
                 <div className="absolute -bottom-2 -right-2 bg-primary text-on-primary w-10 h-10 rounded-full flex items-center justify-center font-bold font-mono text-lg shadow-lg">1</div>
               </div>
-              <h2 className="text-lg font-black text-white font-display-lg truncate">{podium[1].name}</h2>
+              <Link to={podium[1].name !== "VACANT_SLOT" ? `/profile/${podium[1].name}` : "#"} className="hover:underline hover:text-secondary">
+                <h2 className="text-lg font-black text-white font-display-lg truncate">{podium[1].name}</h2>
+              </Link>
               <p className="text-sm font-bold text-primary font-mono mt-1">{podium[1].elo}</p>
               <div className="flex justify-center gap-8 border-t border-white/10 pt-4 mt-6 font-mono text-[10px]">
                 <div>
@@ -214,7 +221,9 @@ export default function Leaderboard() {
                 </div>
                 <div className="absolute -bottom-2 -right-2 bg-tertiary text-on-tertiary w-7 h-7 rounded-full flex items-center justify-center font-bold font-mono text-xs">3</div>
               </div>
-              <h3 className="text-base font-bold text-white font-display-lg truncate">{podium[2].name}</h3>
+              <Link to={podium[2].name !== "VACANT_SLOT" ? `/profile/${podium[2].name}` : "#"} className="hover:underline hover:text-secondary">
+                <h3 className="text-base font-bold text-white font-display-lg truncate">{podium[2].name}</h3>
+              </Link>
               <p className="text-xs font-bold text-tertiary font-mono mt-1">{podium[2].elo}</p>
               <div className="flex justify-center gap-6 border-t border-white/5 pt-4 mt-4 font-mono text-[10px]">
                 <div>
@@ -287,7 +296,9 @@ export default function Leaderboard() {
                           <Trophy className="w-4 h-4" />
                         </div>
                         <span>
-                          {row.name}
+                          <Link to={`/profile/${row.name}`} className="hover:underline hover:text-secondary">
+                            {row.name}
+                          </Link>
                           {row.isUser && (
                             <span className="ml-2 bg-primary/20 text-primary text-[8px] font-bold px-1.5 py-0.5 rounded">
                               YOU

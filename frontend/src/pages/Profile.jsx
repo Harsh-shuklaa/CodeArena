@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Award, Trophy, Swords, LayoutDashboard, UserPlus, Coins, Globe, Settings, RotateCw } from "lucide-react";
+import { Award, Trophy, Swords, LayoutDashboard, Coins, Globe, Settings, RotateCw, Users } from "lucide-react";
 import { UserContext } from "../context/UserContext";
 import BackgroundShader from "../components/BackgroundShader";
 
@@ -15,6 +15,50 @@ export default function Profile() {
   const [isLoading, setIsLoading] = useState(true);
 
   const isOwnProfile = !username || (user && user.username && username.toLowerCase() === user.username.toLowerCase());
+
+  const generateActivityGrid = (activityMap) => {
+    const grid = [];
+    const today = new Date();
+    
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - 364);
+    
+    const startDayOfWeek = startDate.getDay();
+    startDate.setDate(startDate.getDate() - startDayOfWeek);
+    
+    const levels = [
+      "bg-white/5",
+      "bg-secondary/20",
+      "bg-secondary/50",
+      "bg-secondary/80",
+      "bg-secondary"
+    ];
+    
+    let current = new Date(startDate);
+    for (let week = 0; week < 53; week++) {
+      const col = [];
+      for (let day = 0; day < 7; day++) {
+        const dateStr = current.toISOString().split("T")[0];
+        const count = activityMap[dateStr] || 0;
+        
+        let levelIndex = 0;
+        if (count > 0 && count <= 2) levelIndex = 1;
+        else if (count >= 3 && count <= 4) levelIndex = 2;
+        else if (count >= 5 && count <= 6) levelIndex = 3;
+        else if (count >= 7) levelIndex = 4;
+        
+        col.push({
+          date: dateStr,
+          count,
+          colorClass: levels[levelIndex]
+        });
+        
+        current.setDate(current.getDate() + 1);
+      }
+      grid.push(col);
+    }
+    return grid;
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -42,6 +86,13 @@ export default function Profile() {
           const data = await res.json();
           setProfileUser(data.user);
         }
+
+        // Fetch activity logs
+        const actRes = await fetch(`http://localhost:5001/api/user/${targetUsername}/activity`);
+        if (actRes.ok) {
+          const actData = await actRes.json();
+          setHeatmapData(generateActivityGrid(actData));
+        }
       } catch (err) {
         console.error("Profile API retrieval failed", err);
       } finally {
@@ -57,20 +108,6 @@ export default function Profile() {
       setPickerSeed(user.username.toLowerCase());
     }
   }, [user.username]);
-
-  // Generate mock heatmap data on load
-  useEffect(() => {
-    const levels = ["bg-white/5", "bg-secondary/20", "bg-secondary/50", "bg-secondary/80", "bg-secondary"];
-    const grid = [];
-    for (let i = 0; i < 52; i++) {
-      const col = [];
-      for (let j = 0; j < 7; j++) {
-        col.push(levels[Math.floor(Math.random() * 5)]);
-      }
-      grid.push(col);
-    }
-    setHeatmapData(grid);
-  }, []);
 
   const handleSaveAvatar = () => {
     updateAvatar(`https://api.dicebear.com/7.x/bottts/svg?seed=${pickerSeed}`);
@@ -88,25 +125,51 @@ export default function Profile() {
 
   // recentBattles removed to use dynamic context matches
 
-  const achievements = [
-    { title: "Grandmaster Sage", desc: "Won 50 consecutive arena matches.", color: "text-secondary", bgColor: "bg-secondary/10", border: "border-secondary/30" },
-    { title: "Code Surgeon", desc: "Solved 5 hard problems under 5 mins.", color: "text-primary", bgColor: "bg-primary/10", border: "border-primary/30" },
-    { title: "Zero Latency", desc: "Best execution time in 10 contests.", color: "text-tertiary", bgColor: "bg-tertiary/10", border: "border-tertiary/30" },
-  ];
+  const achievements = profileUser ? (profileUser.achievements || []) : [];
 
-  const languages = [
-    { name: "RUST", percent: "64%", gradient: "from-secondary to-blue-500" },
-    { name: "PYTHON", percent: "22%", gradient: "from-primary to-purple-500" },
-    { name: "C++", percent: "14%", gradient: "from-tertiary to-blue-300" },
-  ];
+  const languages = (profileUser && profileUser.languages && profileUser.languages.length > 0)
+    ? profileUser.languages.map(l => {
+        const colors = {
+          "JAVASCRIPT": "from-yellow-400 to-yellow-600",
+          "PYTHON": "from-primary to-purple-500",
+          "C++": "from-tertiary to-blue-300",
+          "RUST": "from-secondary to-blue-500"
+        };
+        return {
+          name: l.name,
+          percent: l.percent,
+          gradient: colors[l.name] || "from-secondary to-blue-500"
+        };
+      })
+    : [];
 
-  if (isLoading || !profileUser) {
+  if (isLoading) {
     return (
       <div className="pt-20 min-h-screen relative flex flex-col items-center justify-center bg-background text-white font-mono text-xs">
         <BackgroundShader />
         <div className="text-center space-y-4 relative z-10">
           <RotateCw className="w-8 h-8 text-secondary animate-spin mx-auto" />
           <p className="tracking-widest animate-pulse">DECRYPTING OPERATOR LOGS...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profileUser) {
+    return (
+      <div className="pt-20 min-h-screen relative flex flex-col items-center justify-center bg-background text-white font-mono text-xs">
+        <BackgroundShader />
+        <div className="text-center space-y-6 relative z-10 p-8 glass-panel border border-error/20 bg-error/5 max-w-md rounded-xl">
+          <h2 className="text-xl font-bold text-error font-display-lg uppercase tracking-wider">OPERATOR NOT FOUND</h2>
+          <p className="text-on-surface-variant leading-relaxed text-[11px]">
+            The database was unable to identify a user corresponding to the specified credentials. Return to the Command Center to initiate connection logs.
+          </p>
+          <Link
+            to="/dashboard"
+            className="inline-block px-6 py-3 bg-primary text-on-primary font-bold tracking-widest rounded hover:shadow-[0_0_15px_rgba(221,183,255,0.4)] transition-all uppercase"
+          >
+            RETURN TO COMMAND CENTER
+          </Link>
         </div>
       </div>
     );
@@ -144,6 +207,9 @@ export default function Profile() {
             <nav className="space-y-1 font-mono text-xs">
               <Link to="/dashboard" className="flex items-center gap-3 text-on-surface-variant hover:text-white pl-4 py-3 hover:bg-white/5 transition-all">
                 <LayoutDashboard className="w-4 h-4" /> Dashboard
+              </Link>
+              <Link to="/dashboard?showFriends=true" className="flex items-center gap-3 text-on-surface-variant hover:text-white pl-4 py-3 hover:bg-white/5 transition-all">
+                <Users className="w-4 h-4" /> Friends
               </Link>
               <Link to="/leaderboard" className="flex items-center gap-3 text-on-surface-variant hover:text-white pl-4 py-3 hover:bg-white/5 transition-all">
                 <Trophy className="w-4 h-4" /> Leaderboard
@@ -191,6 +257,7 @@ export default function Profile() {
                       alt="Player Avatar"
                     />
                   </div>
+                  <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-surface rounded-full ${profileUser.status === "online" ? "bg-green-500 animate-pulse" : "bg-neutral-500"}`}></span>
                   {isOwnProfile && (
                     <button
                       onClick={() => {
@@ -316,6 +383,58 @@ export default function Profile() {
 
               {activeTab === "Overview" && (
                 <>
+                  {/* Real MongoDB Profile Stats Card */}
+                  <div className="glass-panel p-6 rounded-xl border border-white/5 text-left font-mono">
+                    <h3 className="text-xs font-bold text-white uppercase mb-4 tracking-widest text-secondary">OPERATOR_IDENTITY_DECRYPTED</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">EMAIL_ADDRESS</span>
+                        <span className="text-white font-bold block mt-1 break-all">{profileUser.email}</span>
+                      </div>
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">ONLINE_STATUS</span>
+                        <span className={`font-bold block mt-1 ${profileUser.status === "online" ? "text-green-400 animate-pulse" : "text-neutral-500"}`}>
+                          {profileUser.status === "online" ? "ONLINE" : `OFFLINE (${profileUser.lastSeen ? new Date(profileUser.lastSeen).toLocaleDateString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "N/A"})`}
+                        </span>
+                      </div>
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">FRIENDS_COUNT</span>
+                        <span className="text-white font-bold block mt-1 text-lg">{profileUser.friendsCount ?? (profileUser.friends?.length || 0)}</span>
+                      </div>
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">JOIN_DATE</span>
+                        <span className="text-white font-bold block mt-1">
+                          {new Date(profileUser.createdAt).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-xs">
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">TOTAL_MATCHES</span>
+                        <span className="text-white font-bold block mt-1 text-lg">{profileUser.totalMatches ?? ((profileUser.wins || 0) + (profileUser.losses || 0))}</span>
+                      </div>
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">WINS</span>
+                        <span className="text-green-400 font-bold block mt-1 text-lg">{profileUser.wins || 0}</span>
+                      </div>
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">LOSSES</span>
+                        <span className="text-error font-bold block mt-1 text-lg">{profileUser.losses || 0}</span>
+                      </div>
+                      <div className="bg-white/5 p-3.5 rounded border border-white/5">
+                        <span className="text-[10px] text-on-surface-variant block uppercase font-bold">WIN_RATE</span>
+                        <span className="text-secondary font-bold block mt-1 text-lg">
+                          {profileUser.winRate ?? (
+                            ((profileUser.wins || 0) + (profileUser.losses || 0)) > 0
+                              ? Math.round(((profileUser.wins || 0) / ((profileUser.wins || 0) + (profileUser.losses || 0))) * 100)
+                              : 0
+                          )}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Heatmap Grid */}
                   <div className="glass-panel p-6 rounded-xl relative overflow-hidden">
                     <div className="flex justify-between items-center mb-6 font-mono text-xs">
@@ -336,10 +455,11 @@ export default function Profile() {
                       <div className="flex gap-1.5 pb-2">
                         {heatmapData.map((col, cIdx) => (
                           <div key={cIdx} className="flex flex-col gap-1.5">
-                            {col.map((cell, rIdx) => (
+                            {col.map((day, rIdx) => (
                               <div
                                 key={rIdx}
-                                className={`w-2.5 h-2.5 rounded-sm ${cell} hover:scale-125 transition-transform duration-100 cursor-pointer`}
+                                className={`w-2.5 h-2.5 rounded-sm ${day.colorClass} hover:scale-125 transition-transform duration-100 cursor-pointer`}
+                                title={`${day.date}: ${day.count} activities`}
                               />
                             ))}
                           </div>
@@ -485,24 +605,27 @@ export default function Profile() {
               </div>
 
               {/* Active rivals */}
-              <div className="glass-panel p-6 rounded-xl">
-                <h3 className="text-xs font-bold text-white font-mono uppercase mb-4">ACTIVE RIVALS</h3>
+              <div className="glass-panel p-6 rounded-xl font-mono text-xs">
+                <h3 className="text-xs font-bold text-white uppercase mb-4">ACTIVE RIVALS</h3>
                 <div className="flex flex-wrap gap-3">
-                  {[1, 2, 3, 4].map((idx) => (
-                    <div
-                      key={idx}
-                      className="w-10 h-10 rounded-lg border border-white/10 bg-surface-container overflow-hidden hover:border-secondary transition-all cursor-pointer p-0.5"
-                    >
-                      <img
-                        className="w-full h-full object-cover"
-                        src={`https://api.dicebear.com/7.x/bottts/svg?seed=rival-${idx}`}
-                        alt="Rival Avatar"
-                      />
-                    </div>
-                  ))}
-                  <div className="w-10 h-10 rounded-lg border border-white/10 flex items-center justify-center text-on-surface-variant hover:bg-white/5 cursor-pointer">
-                    <UserPlus className="w-5 h-5" />
-                  </div>
+                  {!profileUser.friends || profileUser.friends.length === 0 ? (
+                    <p className="text-[10px] text-on-surface-variant/50 uppercase">No active rivals found.</p>
+                  ) : (
+                    profileUser.friends.map((friend) => (
+                      <Link
+                        key={friend.username}
+                        to={`/profile/${friend.username}`}
+                        className="w-10 h-10 rounded-lg border border-white/10 bg-surface-container overflow-hidden hover:border-secondary transition-all p-0.5"
+                        title={`${friend.username} (${friend.elo} RP)`}
+                      >
+                        <img
+                          className="w-full h-full object-contain"
+                          src={friend.avatarUrl}
+                          alt={friend.username}
+                        />
+                      </Link>
+                    ))
+                  )}
                 </div>
               </div>
 

@@ -5,13 +5,15 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 
 const { connectDB } = require("./config/db.js");
-const { handleSocketConnections } = require("./socket/socketHandler.js");
+const { handleSocketConnections, onlineUsers } = require("./socket/socketHandler.js");
 
 // Routes imports
 const authRoutes = require("./routes/auth.js");
 const userRoutes = require("./routes/user.js");
 const problemRoutes = require("./routes/problem.js");
 const matchRoutes = require("./routes/match.js");
+const notificationRoutes = require("./routes/notification.js");
+const roomRoutes = require("./routes/room.js");
 
 dotenv.config();
 
@@ -23,7 +25,7 @@ const server = http.createServer(app);
 
 // Middleware
 app.use(cors({
-  origin: ["http://localhost:5174", "http://127.0.0.1:5173"],
+  origin: ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
   credentials: true
 }));
 app.use(express.json());
@@ -33,6 +35,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/problem", problemRoutes);
 app.use("/api/match", matchRoutes);
+app.use("/api/notification", notificationRoutes);
+app.use("/api/room", roomRoutes);
 
 // Health check endpoint
 app.get("/", (req, res) => {
@@ -42,11 +46,15 @@ app.get("/", (req, res) => {
 // Configure Socket.io Server
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
     methods: ["GET", "POST"],
     credentials: true
   }
 });
+
+// Expose io and onlineUsers to Express routers
+app.set("io", io);
+app.set("onlineUsers", onlineUsers);
 
 // Bind socket connection hooks
 handleSocketConnections(io);

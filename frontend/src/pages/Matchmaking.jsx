@@ -30,6 +30,14 @@ export default function Matchmaking() {
     socket.emit("joinQueue", { token: localStorage.getItem("codearena_token") });
 
     // Listen for match found event
+    socket.on("match_found", (data) => {
+      const { roomCode } = data;
+      setIsSearching(false);
+      setTimeout(() => {
+        navigate(`/battle/${roomCode}`);
+      }, 1500);
+    });
+
     socket.on("matchFound", (data) => {
       const { matchId } = data;
       setIsSearching(false);
@@ -39,6 +47,7 @@ export default function Matchmaking() {
     });
 
     return () => {
+      socket.off("match_found");
       socket.off("matchFound");
       socket.emit("leaveQueue");
     };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import Editor from "@monaco-editor/react";
 import { HelpCircle, CheckCircle2, RotateCw } from "lucide-react";
 import { UserContext } from "../context/UserContext";
@@ -9,6 +9,16 @@ export default function Battle() {
   const { matchId } = useParams();
   const navigate = useNavigate();
   const { user, socket } = useContext(UserContext);
+  
+  const initialCode = `// Problem solver template
+const decryptStream = (stream, k) => {
+    // Write your high-performance code below:
+    
+    return 0;
+};
+`;
+
+  const [code, setCode] = useState(initialCode);
   const [problem, setProblem] = useState(null);
 
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes default
@@ -24,13 +34,18 @@ export default function Battle() {
   const [isRunningTests, setIsRunningTests] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // MVP States
+  // Lobby & Battle States
   const [battleStarted, setBattleStarted] = useState(false);
   const [showCountdown, setShowCountdown] = useState(false);
   const [countdownVal, setCountdownVal] = useState(3);
   const [lobbyStatus, setLobbyStatus] = useState("waiting"); // "waiting", "guest_joined"
   const [guestUser, setGuestUser] = useState(null);
+  const [selectedOpponent, setSelectedOpponent] = useState(null);
   const [oppStatus, setOppStatus] = useState("Awaiting Start...");
+  const [participants, setParticipants] = useState([]);
+  const [hostId, setHostId] = useState(null);
+  const [roomError, setRoomError] = useState(null);
+  const [prevParticipants, setPrevParticipants] = useState([]);
 
   const isCustomRoom = matchId && matchId.startsWith("CA-");
 
@@ -41,12 +56,114 @@ export default function Battle() {
     // Join battle room
     socket.emit("joinRoom", { matchId, token: localStorage.getItem("codearena_token") });
 
-    // Handle lobby status (for custom invite codes)
-    socket.on("lobbyStatusUpdate", (data) => {
-      const { status, guest } = data;
-      setLobbyStatus(status);
-      if (status === "guest_joined" && guest) {
-        setGuestUser(guest);
+    socket.on("roomStatusUpdate", (data) => {
+      const { participants: updatedParticipants, admin, selectedOpponent: updatedOpponent, difficulty, language, status: dbStatus } = data;
+      setParticipants(updatedParticipants || []);
+      const admId = admin?._id || admin;
+      setHostId(admId);
+      setSelectedDifficulty(difficulty || "Medium");
+      setSelectedLanguage(language || "JAVASCRIPT (ES6)");
+      setSelectedOpponent(updatedOpponent);
+      
+      const hostIdStr = admId ? admId.toString() : "";
+      const opponent = updatedParticipants.find(p => p._id.toString() !== hostIdStr);
+      
+      if (opponent) {
+        setGuestUser(opponent);
+        setLobbyStatus("guest_joined");
+      } else {
+        setGuestUser(null);
+        setLobbyStatus("waiting");
+      }
+
+      if (dbStatus === "active") {
+        setBattleStarted(true);
+      }
+    });
+
+    // Real-time notification updates
+    socket.on("player_joined_lobby", (data) => {
+      const { username } = data;
+      setTerminalOutput(prev => [
+        ...prev,
+        { name: "SYSTEM NOTIFY", status: `operator ${username.toUpperCase()} joined the lobby.`, color: "text-green-400" }
+      ]);
+    });
+
+    socket.on("player_left_lobby", (data) => {
+      const { username } = data;
+      setTerminalOutput(prev => [
+        ...prev,
+        { name: "SYSTEM NOTIFY", status: `operator ${username.toUpperCase()} left the lobby.`, color: "text-red-400" }
+      ]);
+    });
+
+    // Removed from lobby
+    socket.on("player_removed", (data) => {
+      setTerminalOutput(prev => [
+        ...prev,
+        { name: "SYSTEM WARNING", status: "YOU WERE REMOVED BY THE ADMIN.", color: "text-red-400" }
+      ]);
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+    });
+
+    // Opponent Selected
+    socket.on("opponent_selected", (data) => {
+      setSelectedOpponent(data.selectedOpponent);
+      const oppUsername = data.selectedOpponent ? data.selectedOpponent.username.toUpperCase() : "NONE";
+      setTerminalOutput(prev => [
+        ...prev,
+        { name: "LOBBY STATUS", status: `OPPONENT SET TO ${oppUsername}`, color: "text-secondary" }
+      ]);
+    });
+
+    // Match count down start
+    socket.on("match_starting", () => {
+      setShowCountdown(true);
+      setCountdownVal(3);
+
+      let count = 3;
+      const interval = setInterval(() => {
+        count -= 1;
+        if (count === 0) {
+          setCountdownVal("FIGHT!");
+          clearInterval(interval);
+        } else {
+          setCountdownVal(count);
+        }
+      }, 1000);
+    });
+
+    // Match countdown cancelled
+    socket.on("match_cancelled", () => {
+      setShowCountdown(false);
+      setTerminalOutput(prev => [
+        ...prev,
+        { name: "SYSTEM ALERT", status: "ADMIN CANCELLED THE MATCH START.", color: "text-yellow-400" }
+      ]);
+    });
+
+    // Match starts
+    socket.on("match_started", (data) => {
+      const { problem: serverProblem, player1, player2 } = data;
+      
+      const isP1 = player1._id.toString() === user._id.toString();
+      const isP2 = player2 && player2._id.toString() === user._id.toString();
+      
+      if (isP1 || isP2) {
+        setProblem(serverProblem);
+        setGuestUser(isP1 ? player2 : player1);
+        setShowCountdown(false);
+        setBattleStarted(true);
+        setTimeLeft(600);
+      } else {
+        setShowCountdown(false);
+        setTerminalOutput(prev => [
+          ...prev,
+          { name: "SYSTEM NOTIFY", status: "MATCH ACTIVE. YOU ARE SPECTATING.", color: "text-blue-400" }
+        ]);
       }
     });
 
@@ -55,21 +172,11 @@ export default function Battle() {
       const { problem: serverProblem, player1, player2 } = data;
       setProblem(serverProblem);
       
-      const opponent = player1._id === user._id ? player2 : player1;
+      const opponent = player1._id.toString() === user._id.toString() ? player2 : player1;
       setGuestUser(opponent);
       setLobbyStatus("guest_joined");
-      
-      // Start Countdown
-      setShowCountdown(true);
-      setCountdownVal(3);
-      setTimeout(() => setCountdownVal(2), 700);
-      setTimeout(() => setCountdownVal(1), 1400);
-      setTimeout(() => setCountdownVal("FIGHT!"), 2100);
-      setTimeout(() => {
-        setShowCountdown(false);
-        setBattleStarted(true);
-        setTimeLeft(600); // Reset timer
-      }, 2800);
+      setBattleStarted(true);
+      setTimeLeft(600);
     });
 
     // Handle opponent editor typing triggers
@@ -154,7 +261,14 @@ export default function Battle() {
     });
 
     return () => {
-      socket.off("lobbyStatusUpdate");
+      socket.off("roomStatusUpdate");
+      socket.off("player_joined_lobby");
+      socket.off("player_left_lobby");
+      socket.off("player_removed");
+      socket.off("opponent_selected");
+      socket.off("match_starting");
+      socket.off("match_cancelled");
+      socket.off("match_started");
       socket.off("battleStarted");
       socket.off("opponentStatus");
       socket.off("runResult");
@@ -164,6 +278,73 @@ export default function Battle() {
       socket.off("battleEnded");
     };
   }, [socket, matchId, user._id, navigate]);
+
+  // Recovery: Sync room details from MongoDB on mount/refresh
+  useEffect(() => {
+    if (!matchId) return;
+
+    const fetchRoomDetails = async () => {
+      const token = localStorage.getItem("codearena_token");
+      if (!token) return;
+
+      try {
+        const res = await fetch(`http://localhost:5001/api/room/${matchId}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setParticipants(data.participants || []);
+          const admId = data.admin?._id || data.admin;
+          setHostId(admId);
+          setSelectedDifficulty(data.difficulty || "Medium");
+          setSelectedLanguage(data.language || "JAVASCRIPT (ES6)");
+          setSelectedOpponent(data.selectedOpponent);
+          
+          if (data.status === "active") {
+            setBattleStarted(true);
+            setProblem(data.problemId);
+          }
+          
+          const hostIdStr = admId ? admId.toString() : "";
+          const opponent = data.participants.find(p => p._id.toString() !== hostIdStr);
+          if (opponent) {
+            setGuestUser(opponent);
+            setLobbyStatus("guest_joined");
+          } else {
+            setGuestUser(null);
+            setLobbyStatus("waiting");
+          }
+        } else if (res.status === 404) {
+          setRoomError("Lobby code is invalid or expired.");
+        }
+      } catch (err) {
+        console.error("Failed to restore room details from database", err);
+      }
+    };
+
+    fetchRoomDetails();
+  }, [matchId]);
+
+  // Terminal logs: Monitor participants presence change in real-time
+  useEffect(() => {
+    if (participants.length > 0 && prevParticipants.length > 0) {
+      const joined = participants.find(p => !prevParticipants.some(prev => prev._id === p._id));
+      if (joined) {
+        setTerminalOutput(prev => [
+          ...prev,
+          { name: "SYSTEM STATUS", status: `operator ${joined.username.toUpperCase()} connected.`, color: "text-green-400" }
+        ]);
+      }
+      const left = prevParticipants.find(prev => !participants.some(p => p._id === prev._id));
+      if (left) {
+        setTerminalOutput(prev => [
+          ...prev,
+          { name: "SYSTEM STATUS", status: `operator ${left.username.toUpperCase()} left.`, color: "text-error" }
+        ]);
+      }
+    }
+    setPrevParticipants(participants);
+  }, [participants, prevParticipants]);
 
   // Match Timer Effect
   useEffect(() => {
@@ -180,30 +361,22 @@ export default function Battle() {
     return () => clearInterval(timer);
   }, [battleStarted]);
 
-  // Keystrokes typing status emission helper
+  // Autosave effect hook
+  useEffect(() => {
+    if (!battleStarted || !socket || !matchId) return;
+
+    const delayDebounce = setTimeout(() => {
+      socket.emit("autosaveCode", { matchId, code });
+    }, 1000);
+
+    return () => clearTimeout(delayDebounce);
+  }, [code, battleStarted, socket, matchId]);
+
   const handleEditorChange = (val) => {
     setCode(val || "");
     if (socket && matchId) {
       socket.emit("opponentStatus", { matchId, status: "Typing..." });
     }
-  };
-
-  const handleStartBattle = () => {
-    // If hosts clicks explicitly start on custom invite code
-    if (socket && matchId) {
-      socket.emit("opponentStatus", { matchId, status: "Typing..." });
-    }
-    setShowCountdown(true);
-    setCountdownVal(3);
-    
-    setTimeout(() => setCountdownVal(2), 700);
-    setTimeout(() => setCountdownVal(1), 1400);
-    setTimeout(() => setCountdownVal("FIGHT!"), 2100);
-    setTimeout(() => {
-      setShowCountdown(false);
-      setBattleStarted(true);
-      setTimeLeft(600);
-    }, 2800);
   };
 
   const handleRunTests = () => {
@@ -228,15 +401,56 @@ export default function Battle() {
     });
   };
 
-  const initialCode = `// Problem solver template
-const decryptStream = (stream, k) => {
-    // Write your high-performance code below:
-    
-    return 0;
-};
-`;
+  const handleInviteFriend = async (friendUsername) => {
+    const token = localStorage.getItem("codearena_token");
+    if (!token) return;
 
-  const [code, setCode] = useState(initialCode);
+    try {
+      const res = await fetch("http://localhost:5001/api/room/invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ roomCode: matchId, friendUsername })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTerminalOutput(prev => [
+          ...prev,
+          { name: "SYSTEM STATUS", status: `INVITATION TRANSMITTED TO ${friendUsername.toUpperCase()}`, color: "text-secondary" }
+        ]);
+      } else {
+        alert(data.message || "Failed to send invitation.");
+      }
+    } catch (err) {
+      console.error("Failed to invite friend", err);
+    }
+  };
+
+  if (roomError) {
+    return (
+      <div className="pt-20 min-h-screen relative flex flex-col items-center justify-center bg-background text-white font-mono text-xs">
+        <BackgroundShader />
+        <div className="text-center space-y-6 relative z-10 p-8 glass-panel border border-error/20 bg-error/5 max-w-md rounded-xl">
+          <h2 className="text-xl font-bold text-error font-display-lg uppercase tracking-wider">LOBBY NOT FOUND</h2>
+          <p className="text-on-surface-variant leading-relaxed text-[11px]">
+            {roomError} Please verify the code or request a new invitation from the host.
+          </p>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="inline-block px-6 py-3 bg-primary text-on-primary font-bold tracking-widest rounded hover:shadow-[0_0_15px_rgba(221,183,255,0.4)] transition-all uppercase cursor-pointer"
+          >
+            RETURN TO COMMAND CENTER
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const hostIdStr = hostId ? (hostId._id ? hostId._id.toString() : hostId.toString()) : "";
+  const isMeAdmin = hostIdStr === user._id?.toString();
+  const hasOpponent = selectedOpponent !== null;
 
   return (
     <div className="pt-20 min-h-screen relative flex flex-col bg-[#0e0e13] overflow-hidden">
@@ -269,42 +483,86 @@ const decryptStream = (stream, k) => {
               <div>
                 <h3 className="text-xs font-bold text-secondary font-mono tracking-wider border-b border-white/5 pb-2 mb-6 uppercase">CONNECTED_OPERATORS</h3>
                 <div className="space-y-4">
-                  {/* Host */}
-                  <div className="flex items-center gap-4 bg-primary/5 p-4 rounded border border-primary/20">
-                    <div className="w-12 h-12 rounded border border-primary/50 bg-surface overflow-hidden p-0.5 shadow-[0_0_10px_rgba(221,183,255,0.3)] shrink-0">
-                      <img src={user.avatarUrl} alt="Host Avatar" className="w-full h-full object-contain" />
-                    </div>
-                    <div className="text-left font-mono">
-                      <p className="text-[10px] text-primary font-bold uppercase">HOST (YOU)</p>
-                      <p className="text-sm font-bold text-white leading-none mt-1">{user.username}</p>
-                      <p className="text-[9px] text-on-surface-variant mt-1.5 font-bold">MMR: {user.elo} RP</p>
-                    </div>
-                    <span className="ml-auto text-green-400 font-bold font-mono text-[10px] bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded tracking-wide">
-                      READY ✓
-                    </span>
-                  </div>
+                  {participants.map((p) => {
+                    const isHost = p._id.toString() === hostIdStr;
+                    const isMe = p._id.toString() === user._id.toString();
+                    const isSelected = selectedOpponent && (selectedOpponent._id ? selectedOpponent._id.toString() : selectedOpponent.toString()) === p._id.toString();
+                    const isOnline = p.status === "online";
+                    return (
+                      <div
+                        key={p._id}
+                        className={`flex items-center gap-4 p-4 rounded border animate-fade-in ${
+                          isHost ? "bg-primary/5 border-primary/20" : isSelected ? "bg-secondary/15 border-secondary/40 shadow-[0_0_15px_rgba(76,215,246,0.15)]" : "bg-white/5 border-white/10"
+                        }`}
+                      >
+                        <div className={`w-12 h-12 rounded border overflow-hidden p-0.5 shrink-0 shadow-[0_0_10px_rgba(221,183,255,0.3)] ${
+                          isHost ? "border-primary/50" : isSelected ? "border-secondary/50" : "border-white/20"
+                        }`}>
+                          <img src={p.avatarUrl} alt="Avatar" className="w-full h-full object-contain" />
+                        </div>
+                        <div className="text-left font-mono flex-grow">
+                          <p className={`text-[10px] font-bold uppercase ${isHost ? "text-primary" : "text-secondary"}`}>
+                            {isHost ? "HOST" : "GUEST"} {isMe && "(YOU)"}
+                          </p>
+                          <Link to={`/profile/${p.username}`} className="text-sm font-bold text-white hover:text-secondary hover:underline block leading-none mt-1">
+                            {p.username}
+                          </Link>
+                          <p className={`text-[9px] mt-1.5 font-bold ${isOnline ? "text-green-400 animate-pulse" : "text-neutral-500"}`}>
+                            MMR: {p.elo} RP | {isOnline ? "ONLINE" : "OFFLINE"}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          {isMeAdmin && !isHost && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  socket.emit("selectOpponent", {
+                                    roomCode: matchId,
+                                    opponentId: isSelected ? null : p._id
+                                  });
+                                }}
+                                className={`px-2.5 py-1 rounded font-mono text-[9px] font-bold transition-all cursor-pointer ${
+                                  isSelected 
+                                    ? "bg-secondary text-on-secondary shadow-[0_0_10px_rgba(76,215,246,0.3)]" 
+                                    : "border border-secondary/50 text-secondary hover:bg-secondary/15"
+                                }`}
+                              >
+                                {isSelected ? "OPPONENT ✓" : "SELECT OPPONENT"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  socket.emit("removeUser", {
+                                    roomCode: matchId,
+                                    userIdToRemove: p._id
+                                  });
+                                }}
+                                className="px-2.5 py-1 border border-error/50 text-error hover:bg-error/15 rounded font-mono text-[9px] font-bold transition-all cursor-pointer"
+                              >
+                                REMOVE
+                              </button>
+                            </>
+                          )}
+                          {!isMeAdmin && isSelected && (
+                            <span className="text-secondary font-bold font-mono text-[10px] bg-secondary/10 border border-secondary/20 px-2 py-0.5 rounded tracking-wide">
+                              SELECTED OPPONENT ✓
+                            </span>
+                          )}
+                          {isHost && (
+                            <span className="text-primary font-bold font-mono text-[10px] bg-primary/10 border border-primary/20 px-2 py-0.5 rounded tracking-wide">
+                              HOST ✓
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                   
-                  {/* Guest slot */}
-                  {lobbyStatus === "waiting" ? (
+                  {participants.length < 2 && (
                     <div className="flex items-center justify-center p-8 border border-white/5 border-dashed rounded min-h-[82px] animate-pulse">
                       <div className="text-center font-mono space-y-1">
                         <span className="text-[10px] text-on-surface-variant tracking-wider">AWAITING OPPONENT...</span>
-                        <span className="block text-[8px] text-secondary">SIMULATING INVITATION TO ARYAN_99</span>
+                        <span className="block text-[8px] text-secondary">Share room code to invite</span>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-4 bg-secondary/5 p-4 rounded border border-secondary/20 animate-fade-in">
-                      <div className="w-12 h-12 rounded border border-secondary/50 bg-surface overflow-hidden p-0.5 shadow-[0_0_10px_rgba(76,215,246,0.3)] shrink-0">
-                        <img src={guestUser.avatarUrl} alt="Guest Avatar" className="w-full h-full object-contain" />
-                      </div>
-                      <div className="text-left font-mono">
-                        <p className="text-[10px] text-secondary font-bold uppercase">GUEST</p>
-                        <p className="text-sm font-bold text-white leading-none mt-1">{guestUser.username}</p>
-                        <p className="text-[9px] text-on-surface-variant mt-1.5 font-bold">MMR: {guestUser.elo} RP</p>
-                      </div>
-                      <span className="ml-auto text-green-400 font-bold font-mono text-[10px] bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded tracking-wide">
-                        READY ✓
-                      </span>
                     </div>
                   )}
                 </div>
@@ -326,7 +584,8 @@ const decryptStream = (stream, k) => {
                   <select
                     value={selectedDifficulty}
                     onChange={(e) => setSelectedDifficulty(e.target.value)}
-                    className="w-full bg-surface-container border border-white/10 px-3 py-2 rounded text-white text-xs focus:outline-none focus:border-primary font-semibold cursor-pointer"
+                    disabled={!isMeAdmin}
+                    className="w-full bg-surface-container border border-white/10 px-3 py-2 rounded text-white text-xs focus:outline-none focus:border-primary font-semibold cursor-pointer disabled:opacity-50"
                   >
                     <option>Easy</option>
                     <option>Medium</option>
@@ -340,7 +599,8 @@ const decryptStream = (stream, k) => {
                   <select
                     value={selectedLanguage}
                     onChange={(e) => setSelectedLanguage(e.target.value)}
-                    className="w-full bg-surface-container border border-white/10 px-3 py-2 rounded text-white text-xs focus:outline-none focus:border-primary font-semibold cursor-pointer"
+                    disabled={!isMeAdmin}
+                    className="w-full bg-surface-container border border-white/10 px-3 py-2 rounded text-white text-xs focus:outline-none focus:border-primary font-semibold cursor-pointer disabled:opacity-50"
                   >
                     <option>JAVASCRIPT (ES6)</option>
                     <option>PYTHON 3.11</option>
@@ -351,30 +611,67 @@ const decryptStream = (stream, k) => {
                 
                 {/* Invite list */}
                 <div className="font-mono">
-                  <label className="text-[9px] text-on-surface-variant font-bold block uppercase mb-1.5">INVITE ACTIVE FRIENDS</label>
-                  <div className="max-h-24 overflow-y-auto border border-white/10 bg-[#0e0e13] rounded p-2 space-y-1.5">
-                    {user.friends.map(f => (
-                      <div key={f.username} className="flex justify-between items-center text-[10px] py-0.5 border-b border-white/5 last:border-0">
-                        <span className="font-bold text-white">{f.username}</span>
-                        <button
-                          onClick={() => alert(`Invite request sent to ${f.username}!`)}
-                          className="px-2.5 py-0.5 bg-secondary hover:bg-secondary/80 text-on-secondary font-extrabold rounded text-[9px] transition-colors"
-                        >
-                          INVITE
-                        </button>
-                      </div>
-                    ))}
+                  <label className="text-[9px] text-on-surface-variant font-bold block uppercase mb-1.5">INVITE FRIENDS</label>
+                  <div className="max-h-36 overflow-y-auto border border-white/10 bg-[#0e0e13] rounded p-2 space-y-1.5">
+                    {user.friends.length === 0 ? (
+                      <div className="text-[9px] text-on-surface-variant/40 text-center py-4">NO FRIENDS CONNECTED</div>
+                    ) : (
+                      [...user.friends]
+                        .sort((a, b) => {
+                          if (a.status === "online" && b.status !== "online") return -1;
+                          if (a.status !== "online" && b.status === "online") return 1;
+                          return b.elo - a.elo;
+                        })
+                        .map(f => {
+                          const isOnline = f.status === "online";
+                          const isAlreadyInRoom = participants.some(p => p.username === f.username);
+                          return (
+                            <div key={f.username} className="flex justify-between items-center text-[10px] py-1 border-b border-white/5 last:border-0">
+                              <span className="font-bold text-white flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-green-400 animate-pulse" : "bg-neutral-500"}`}></span>
+                                {f.username} <span className="opacity-40 font-normal">({f.elo} RP)</span>
+                              </span>
+                              {isAlreadyInRoom ? (
+                                <span className="text-[8px] text-on-surface-variant/50 font-bold uppercase tracking-wider">LOBBY ✓</span>
+                              ) : (
+                                <button
+                                  onClick={() => handleInviteFriend(f.username)}
+                                  className="px-2.5 py-0.5 bg-secondary hover:bg-secondary/80 text-on-secondary font-extrabold rounded text-[9px] transition-colors cursor-pointer"
+                                >
+                                  INVITE
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                    )}
                   </div>
                 </div>
               </div>
 
-              <button
-                onClick={handleStartBattle}
-                disabled={lobbyStatus === "waiting"}
-                className="w-full mt-6 py-4 bg-gradient-to-r from-primary to-secondary text-on-primary font-mono text-xs font-bold tracking-widest hover:shadow-[0_0_20px_rgba(221,183,255,0.4)] disabled:opacity-50 transition-all rounded uppercase"
-              >
-                START BATTLE
-              </button>
+              {isMeAdmin ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => socket.emit("startMatch", { roomCode: matchId })}
+                    disabled={!hasOpponent}
+                    className="w-full mt-6 py-4 bg-gradient-to-r from-primary to-secondary text-on-primary font-mono text-xs font-bold tracking-widest hover:shadow-[0_0_20px_rgba(221,183,255,0.4)] disabled:opacity-50 transition-all rounded uppercase cursor-pointer"
+                  >
+                    START BATTLE
+                  </button>
+                  {showCountdown && (
+                    <button
+                      onClick={() => socket.emit("cancelMatch", { roomCode: matchId })}
+                      className="w-full py-2 border border-error/50 text-error font-mono text-[10px] font-bold tracking-widest hover:bg-error/10 transition-all rounded uppercase cursor-pointer"
+                    >
+                      CANCEL COUNTDOWN
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="w-full mt-6 py-4 bg-surface-container/50 border border-white/5 text-on-surface-variant font-mono text-xs font-bold text-center rounded tracking-widest uppercase">
+                  AWAITING HOST TO START MATCH...
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -518,14 +815,14 @@ const decryptStream = (stream, k) => {
                   <button
                     onClick={handleRunTests}
                     disabled={isRunningTests}
-                    className="px-5 py-2 border border-secondary text-secondary hover:bg-secondary/10 disabled:opacity-50 transition-all rounded"
+                    className="px-5 py-2 border border-secondary text-secondary hover:bg-secondary/10 disabled:opacity-50 transition-all rounded cursor-pointer"
                   >
                     {isRunningTests ? "RUNNING..." : "RUN TESTS"}
                   </button>
                   <button
                     onClick={handleSubmitCode}
                     disabled={isSubmitting}
-                    className="px-5 py-2 bg-gradient-to-r from-primary to-primary-container text-on-primary hover:brightness-110 shadow-[0_0_15px_rgba(221,183,255,0.4)] disabled:opacity-50 transition-all rounded flex items-center gap-2"
+                    className="px-5 py-2 bg-gradient-to-r from-primary to-primary-container text-on-primary hover:brightness-110 shadow-[0_0_15px_rgba(221,183,255,0.4)] disabled:opacity-50 transition-all rounded flex items-center gap-2 cursor-pointer"
                   >
                     {isSubmitting ? (
                       <>
@@ -562,7 +859,7 @@ const decryptStream = (stream, k) => {
                     <span className="text-[10px] text-on-surface-variant font-bold">TERMINAL_OUTPUT</span>
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                   </div>
-                  <div className="space-y-2 font-bold">
+                  <div className="space-y-2 font-bold text-left">
                     {terminalOutput.map((tc, idx) => (
                       <p key={idx} className={`flex justify-between ${tc.color}`}>
                         <span>{tc.name}</span>

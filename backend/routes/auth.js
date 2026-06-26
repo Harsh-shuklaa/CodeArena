@@ -6,6 +6,8 @@ const { protect } = require("../middleware/auth");
 
 const router = express.Router();
 
+const Activity = require("../models/Activity");
+
 // Helper to generate JWT Token
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || "cyberpunk_coding_secret_key_99", {
@@ -55,6 +57,9 @@ router.post("/signup", async (req, res) => {
     });
 
     if (user) {
+      // Log signup as login activity
+      await Activity.create({ userId: user._id, type: "login" });
+
       res.status(201).json({
         token: generateToken(user._id),
         user: {
@@ -102,6 +107,9 @@ router.post("/login", async (req, res) => {
     });
 
     if (user && (await bcrypt.compare(password, user.passwordHash))) {
+      // Log login activity
+      await Activity.create({ userId: user._id, type: "login" });
+
       res.json({
         token: generateToken(user._id),
         user: {

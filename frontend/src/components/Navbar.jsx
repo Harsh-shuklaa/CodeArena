@@ -1,6 +1,6 @@
 import { useState, useContext } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Terminal, Menu, X, Swords, LogOut } from "lucide-react";
+import { Terminal, Menu, X, Swords, LogOut, Users } from "lucide-react";
 import { UserContext } from "../context/UserContext";
 
 export default function Navbar() {
@@ -11,6 +11,7 @@ export default function Navbar() {
   const links = user.isLoggedIn
     ? [
         { name: "Dashboard", path: "/dashboard" },
+        { name: "Friends", path: "/dashboard?showFriends=true" },
         { name: "Battles", path: "/matchmaking" },
         { name: "Leaderboard", path: "/leaderboard" },
       ]
@@ -40,18 +41,22 @@ export default function Navbar() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-on-surface-variant">
-          {links.map((link) => (
-            <Link
-              key={link.name}
-              to={link.path}
-              onClick={() => handleLinkClick(link.isAnchor)}
-              className={`hover:text-primary transition-colors duration-200 ${
-                location.pathname === link.path ? "text-primary font-semibold" : "text-on-surface-variant"
-              }`}
-            >
-              {link.name}
-            </Link>
-          ))}
+          {links.map((link) => {
+            const isActive = (location.pathname + location.search) === link.path || 
+              (link.path === "/dashboard" && location.pathname === "/dashboard" && !location.search.includes("showFriends"));
+            return (
+              <Link
+                key={link.name}
+                to={link.path}
+                onClick={() => handleLinkClick(link.isAnchor)}
+                className={`hover:text-primary transition-colors duration-200 ${
+                  isActive ? "text-primary font-semibold" : "text-on-surface-variant"
+                }`}
+              >
+                {link.name}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Desktop CTAs / Profile widget */}
@@ -100,18 +105,22 @@ export default function Navbar() {
       {/* Mobile Menu Drawer */}
       {mobileOpen && (
         <div className="md:hidden absolute top-[64px] left-0 w-full bg-surface/95 border-b border-white/10 flex flex-col p-6 gap-4 z-40 backdrop-blur-xl animate-fade-in">
-          {links.map((link) => (
-            <Link
-              key={link.name}
-              to={link.path}
-              onClick={() => handleLinkClick(link.isAnchor)}
-              className={`text-base py-2 border-b border-white/5 ${
-                location.pathname === link.path ? "text-primary font-semibold" : "text-on-surface-variant"
-              }`}
-            >
-              {link.name}
-            </Link>
-          ))}
+          {links.map((link) => {
+            const isActive = (location.pathname + location.search) === link.path || 
+              (link.path === "/dashboard" && location.pathname === "/dashboard" && !location.search.includes("showFriends"));
+            return (
+              <Link
+                key={link.name}
+                to={link.path}
+                onClick={() => handleLinkClick(link.isAnchor)}
+                className={`text-base py-2 border-b border-white/5 ${
+                  isActive ? "text-primary font-semibold" : "text-on-surface-variant"
+                }`}
+              >
+                {link.name}
+              </Link>
+            );
+          })}
           <div className="flex flex-col gap-3 mt-2">
             {user.isLoggedIn ? (
               <div className="flex flex-col gap-3">

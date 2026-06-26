@@ -2,13 +2,35 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Problem = require("../models/Problem");
 const Match = require("../models/Match");
+const FriendRequest = require("../models/FriendRequest");
+const Notification = require("../models/Notification");
+const Room = require("../models/Room");
+const Matchmaking = require("../models/Matchmaking");
+const Submission = require("../models/Submission");
 const { executeCode } = require("../services/judge0");
 
-// In-memory queue of players searching for a game
-let matchmakingQueue = [];
-
-// Track active battle room details: { matchId: { player1Socket, player2Socket, startTime, problem } }
+// Track active battle room details in memory: { matchId: { player1Socket, player2Socket, startTime, problem } }
 const activeBattles = new Map();
+
+// Track online users mapping userId -> socketId
+const onlineUsers = new Map();
+
+/**
+ * Generate a unique room code of format CA-XXXX
+ */
+const generateUniqueRoomCode = async () => {
+  let isUnique = false;
+  let code = "";
+  while (!isUnique) {
+    const num = Math.floor(1000 + Math.random() * 9000);
+    code = `CA-${num}`;
+    const existing = await Room.findOne({ roomCode: code });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+  return code;
+};
 
 /**
  * Verify JWT Token and return the user object
@@ -25,43 +47,6 @@ const verifyUserToken = async (token) => {
   }
 };
 
-const getOrCreateGuestUser = async (socketId) => {
-  try {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const username = `Guest_${randomSuffix}`;
-    const email = `guest_${socketId}@codearena.dev`;
-    const user = await User.create({
-      username,
-      email,
-      passwordHash: "guest_dummy_hash",
-      elo: 1200,
-      coins: 250,
-      xp: 0,
-      level: 1,
-      wins: 0,
-      losses: 0
-    });
-    return user;
-  } catch (error) {
-    console.error("[SOCKET GUEST CREATION ERROR]", error.message);
-    const randomSuffix = Math.floor(10000 + Math.random() * 90000);
-    const username = `Guest_${randomSuffix}`;
-    const email = `guest_retry_${randomSuffix}@codearena.dev`;
-    const user = await User.create({
-      username,
-      email,
-      passwordHash: "guest_dummy_hash",
-      elo: 1200,
-      coins: 250,
-      xp: 0,
-      level: 1,
-      wins: 0,
-      losses: 0
-    });
-    return user;
-  }
-};
-
 const handleSocketConnections = (io) => {
   io.on("connection", async (socket) => {
     console.log(`[SOCKET] Node connected: ${socket.id}`);
@@ -69,71 +54,114 @@ const handleSocketConnections = (io) => {
     // Authenticate connection immediately
     const token = socket.handshake.auth?.token;
     let user = await verifyUserToken(token);
+
     if (user) {
       socket.user = user;
       console.log(`[SOCKET] Authenticated user ${user.username} for socket ${socket.id}`);
+      
+      // Update status to online in database
+      await User.findByIdAndUpdate(user._id, { status: "online", lastSeen: new Date() });
+      
+      // Join personal room for real-time target notifications
+      socket.join(user._id.toString());
+
+      // Store in onlineUsers map
+      onlineUsers.set(user._id.toString(), socket.id);
+
+      // Broadcast presence change to friends
+      const userWithFriends = await User.findById(user._id).select("friends");
+      if (userWithFriends && userWithFriends.friends) {
+        userWithFriends.friends.forEach((friendId) => {
+          io.to(friendId.toString()).emit("friendPresenceChange", {
+            userId: user._id.toString(),
+            status: "online",
+          });
+        });
+      }
     } else {
-      user = await getOrCreateGuestUser(socket.id);
-      socket.user = user;
-      console.log(`[SOCKET] Assigned guest user ${user.username} for socket ${socket.id}`);
-      socket.emit("guestAssigned", {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        avatarUrl: user.avatarUrl,
-        elo: user.elo,
-        coins: user.coins,
-        xp: user.xp,
-        level: user.level,
-        wins: user.wins,
-        losses: user.losses,
-      });
+      // Unauthenticated client connection - keep open for guest or reject
+      console.log(`[SOCKET] Unauthenticated node connection: ${socket.id}`);
     }
 
+    socket.on("register-user", async (userId) => {
+      if (userId) {
+        onlineUsers.set(userId.toString(), socket.id);
+        await User.findByIdAndUpdate(userId, { status: "online", lastSeen: new Date() });
+        console.log(`[SOCKET] Registered online user ${userId} to socket ${socket.id}`);
+        
+        // Broadcast presence change to friends
+        const userWithFriends = await User.findById(userId).select("friends");
+        if (userWithFriends && userWithFriends.friends) {
+          userWithFriends.friends.forEach((friendId) => {
+            io.to(friendId.toString()).emit("friendPresenceChange", {
+              userId: userId.toString(),
+              status: "online",
+            });
+          });
+        }
+      }
+    });
+
     // ==========================================
-    // 1. MATCHMAKING EVENTS
+    // 1. MATCHMAKING EVENTS (MongoDB-backed FCFS)
     // ==========================================
 
     socket.on("joinQueue", async (data) => {
       try {
-        const user = socket.user;
-
-        if (!user) {
+        const u = socket.user || (data?.token ? await verifyUserToken(data.token) : null);
+        if (!u) {
           socket.emit("error", { message: "Invalid session credentials" });
           return;
         }
+        socket.user = u; // ensure set
 
-        // Purge user from queue if already in it
-        matchmakingQueue = matchmakingQueue.filter((q) => q.userId.toString() !== user._id.toString());
+        // Prevent duplicate entries
+        await Matchmaking.deleteOne({ userId: u._id });
 
-        console.log(`[MATCHMAKING] User ${user.username} entered queue.`);
-        
-        // Push user details to matchmaking queue
-        matchmakingQueue.push({
-          socketId: socket.id,
-          userId: user._id,
-          username: user.username,
-          elo: user.elo,
-          avatarUrl: user.avatarUrl,
+        // User cannot join queue if already in an active room
+        const activeRoom = await Room.findOne({
+          participants: u._id,
+          status: { $in: ["waiting", "active"] }
+        });
+        if (activeRoom) {
+          socket.emit("error", { message: "User cannot join queue if already in a room." });
+          return;
+        }
+
+        console.log(`[MATCHMAKING] User ${u.username} entering MongoDB queue.`);
+
+        // Insert into matchmaking collection
+        await Matchmaking.create({
+          userId: u._id,
+          status: "waiting",
+          joinedAt: new Date()
         });
 
         socket.emit("queueJoined", { message: "Searching for similar operators..." });
 
-        // Matchmaking logic: Pair two players
-        if (matchmakingQueue.length >= 2) {
-          const player1 = matchmakingQueue.shift();
-          const player2 = matchmakingQueue.shift();
+        // Trigger First-Come-First-Serve Matchmaking Check
+        const waitingList = await Matchmaking.find({ status: "waiting" })
+          .sort({ joinedAt: 1 })
+          .populate("userId");
 
-          console.log(`[MATCHMAKING] Match found between: ${player1.username} and ${player2.username}`);
+        if (waitingList.length >= 2) {
+          const player1 = waitingList[0];
+          const player2 = waitingList[1];
 
-          // Fetch a random coding challenge
+          console.log(`[MATCHMAKING] Pairing ${player1.userId.username} vs ${player2.userId.username}`);
+
+          // Remove queue entries
+          await Matchmaking.deleteMany({
+            userId: { $in: [player1.userId._id, player2.userId._id] }
+          });
+
+          // Fetch coding challenge
           const count = await Problem.countDocuments();
           let problem;
           if (count > 0) {
             const randomIdx = Math.floor(Math.random() * count);
             problem = await Problem.findOne().skip(randomIdx);
           } else {
-            // Seed fallback on-the-fly if needed
             problem = await Problem.create({
               title: "Default Decryption Challenge",
               difficulty: "Medium",
@@ -142,34 +170,80 @@ const handleSocketConnections = (io) => {
             });
           }
 
-          // Create new Match entry in database
+          const roomCode = await generateUniqueRoomCode();
+
+          // Create active Room
+          const room = await Room.create({
+            roomCode,
+            admin: player1.userId._id,
+            participants: [player1.userId._id, player2.userId._id],
+            selectedOpponent: player2.userId._id,
+            roomType: "matchmaking",
+            status: "active",
+            problemId: problem._id,
+          });
+
+          // Create Match
           const match = await Match.create({
-            player1Id: player1.userId,
-            player2Id: player2.userId,
+            player1Id: player1.userId._id,
+            player2Id: player2.userId._id,
             problemId: problem._id,
             status: "ongoing",
             startTime: Date.now(),
           });
 
-          // Notify Player 1
-          io.to(player1.socketId).emit("matchFound", {
-            matchId: match._id.toString(),
-            opponent: {
-              username: player2.username,
-              avatarUrl: player2.avatarUrl,
-              elo: player2.elo,
-            },
-          });
+          // Log match activities
+          await Activity.create({ userId: player1.userId._id, type: "match" });
+          await Activity.create({ userId: player2.userId._id, type: "match" });
 
-          // Notify Player 2
-          io.to(player2.socketId).emit("matchFound", {
+          const p1Socket = onlineUsers.get(player1.userId._id.toString());
+          const p2Socket = onlineUsers.get(player2.userId._id.toString());
+
+          // Emit match_found to both users
+          const matchData = {
+            roomCode,
             matchId: match._id.toString(),
-            opponent: {
-              username: player1.username,
-              avatarUrl: player1.avatarUrl,
-              elo: player1.elo,
-            },
-          });
+            problem: {
+              title: problem.title,
+              difficulty: problem.difficulty,
+              statement: problem.statement,
+              constraints: problem.constraints,
+              sampleInput: problem.sampleInput,
+              sampleOutput: problem.sampleOutput,
+            }
+          };
+
+          if (p1Socket) {
+            io.to(p1Socket).emit("match_found", {
+              ...matchData,
+              opponent: {
+                username: player2.userId.username,
+                avatarUrl: player2.userId.avatarUrl,
+                elo: player2.userId.elo,
+                wins: player2.userId.wins,
+                winRate: (player2.userId.wins + player2.userId.losses) > 0 
+                  ? Math.round((player2.userId.wins / (player2.userId.wins + player2.userId.losses)) * 100) 
+                  : 0,
+                status: "online",
+              }
+            });
+          }
+
+          if (p2Socket) {
+            io.to(p2Socket).emit("match_found", {
+              ...matchData,
+              opponent: {
+                username: player1.userId.username,
+                avatarUrl: player1.userId.avatarUrl,
+                elo: player1.userId.elo,
+                wins: player1.userId.wins,
+                winRate: (player1.userId.wins + player1.userId.losses) > 0 
+                  ? Math.round((player1.userId.wins / (player1.userId.wins + player1.userId.losses)) * 100) 
+                  : 0,
+                status: "online",
+              }
+            });
+          }
         }
       } catch (err) {
         console.error("[SOCKET joinQueue ERROR]", err);
@@ -177,180 +251,232 @@ const handleSocketConnections = (io) => {
       }
     });
 
-    socket.on("leaveQueue", () => {
-      console.log(`[MATCHMAKING] Socket ${socket.id} left queue.`);
-      matchmakingQueue = matchmakingQueue.filter((q) => q.socketId !== socket.id);
+    socket.on("leaveQueue", async () => {
+      if (socket.user) {
+        console.log(`[MATCHMAKING] User ${socket.user.username} left queue.`);
+        await Matchmaking.deleteOne({ userId: socket.user._id });
+      }
     });
 
     // ==========================================
-    // 2. BATTLE ROOM EVENTS
+    // 2. ROOM / LOBBY EVENTS
     // ==========================================
 
     socket.on("joinRoom", async (data) => {
       const { matchId } = data || {};
-      const user = socket.user;
+      const u = socket.user || (data?.token ? await verifyUserToken(data.token) : null);
 
-      if (!user) {
+      if (!u) {
         socket.emit("error", { message: "Verification failed on joinRoom" });
         return;
       }
+      socket.user = u;
 
       try {
-        const isCustomRoom = matchId && matchId.startsWith("CA-");
-
-        if (isCustomRoom && !activeBattles.has(matchId)) {
-          if (user.username.startsWith("Guest_")) {
-            socket.emit("error", { message: "Guests are not authorized to create custom rooms. Please sign up." });
-            return;
-          }
-        }
-
         socket.join(matchId);
-        console.log(`[BATTLE] Operator ${user.username} joined room ${matchId}`);
+        console.log(`[BATTLE] User ${u.username} joined socket room ${matchId}`);
 
-        if (isCustomRoom) {
-          // Initialize custom lobby state in memory
+        // Sync with Room in MongoDB
+        let dbRoom = await Room.findOne({ roomCode: matchId });
+        if (dbRoom) {
+          const hasJoined = dbRoom.participants.some(p => p.toString() === u._id.toString());
+          if (!hasJoined) {
+            dbRoom.participants.push(u._id);
+            await dbRoom.save();
+            io.to(matchId).emit("player_joined_lobby", { userId: u._id.toString(), username: u.username });
+          }
+
+          // Populate room details
+          const populatedRoom = await Room.findOne({ roomCode: matchId })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("problemId");
+
+          // Sync in-memory room mapping if active
           if (!activeBattles.has(matchId)) {
-            // Fetch a random problem to prepare
-            const count = await Problem.countDocuments();
-            let problem;
-            if (count > 0) {
-              const randomIdx = Math.floor(Math.random() * count);
-              problem = await Problem.findOne().skip(randomIdx);
-            } else {
-              problem = await Problem.create({
-                title: "Default Decryption Challenge",
-                difficulty: "Medium",
-                statement: "Reverse a string of packet payloads.",
-                testcases: [{ input: "hello", output: "olleh" }],
-              });
-            }
-
             activeBattles.set(matchId, {
               matchId,
               dbMatchId: null,
-              hostUser: user,
-              guestUser: null,
-              player1Socket: socket.id,
-              player2Socket: null,
+              admin: populatedRoom.admin,
+              player1Socket: populatedRoom.admin._id.toString() === u._id.toString() ? socket.id : null,
+              player2Socket: populatedRoom.selectedOpponent && populatedRoom.selectedOpponent._id.toString() === u._id.toString() ? socket.id : null,
               startTime: null,
-              problem,
+              problem: populatedRoom.problemId,
               timeouts: {},
             });
-
-            console.log(`[LOBBY] Created custom lobby ${matchId} hosted by ${user.username}`);
-            // Notify host they joined successfully
-            socket.emit("lobbyStatusUpdate", { status: "waiting", user });
           } else {
-            // Guest is joining
             const roomState = activeBattles.get(matchId);
-            
-            // Reconnection check
-            if (roomState.timeouts[user._id.toString()]) {
-              clearTimeout(roomState.timeouts[user._id.toString()]);
-              delete roomState.timeouts[user._id.toString()];
-              if (roomState.hostUser._id.toString() === user._id.toString()) {
-                roomState.player1Socket = socket.id;
-              } else {
-                roomState.player2Socket = socket.id;
-              }
-              socket.to(matchId).emit("opponentReconnected", { username: user.username });
-              console.log(`[BATTLE] Custom lobby player ${user.username} reconnected.`);
-              return;
-            }
-
-            if (!roomState.guestUser && roomState.hostUser._id.toString() !== user._id.toString()) {
-              roomState.guestUser = user;
+            if (populatedRoom.admin._id.toString() === u._id.toString()) {
+              roomState.player1Socket = socket.id;
+            } else if (populatedRoom.selectedOpponent && populatedRoom.selectedOpponent._id.toString() === u._id.toString()) {
               roomState.player2Socket = socket.id;
-              roomState.startTime = Date.now();
-
-              console.log(`[LOBBY] Guest ${user.username} joined custom lobby ${matchId}`);
-
-              // Instantiate the database Match record now that we have both players
-              const match = await Match.create({
-                player1Id: roomState.hostUser._id,
-                player2Id: roomState.guestUser._id,
-                problemId: roomState.problem._id,
-                status: "ongoing",
-                startTime: roomState.startTime,
-              });
-
-              roomState.dbMatchId = match._id.toString();
-
-              // Notify both players in the lobby that opponent has connected
-              io.to(matchId).emit("lobbyStatusUpdate", { 
-                status: "guest_joined",
-                guest: {
-                  username: user.username,
-                  avatarUrl: user.avatarUrl,
-                  elo: user.elo
-                }
-              });
             }
           }
-        } else {
-          // Ranked matches (Mongoose match ID)
-          const match = await Match.findById(matchId)
-            .populate("player1Id", "username avatarUrl elo")
-            .populate("player2Id", "username avatarUrl elo")
-            .populate("problemId");
 
-          if (!match) {
-            socket.emit("error", { message: "Match session does not exist" });
-            return;
-          }
-
-          if (!activeBattles.has(matchId)) {
-            activeBattles.set(matchId, {
-              matchId,
-              dbMatchId: matchId,
-              player1Socket: null,
-              player2Socket: null,
-              startTime: Date.now(),
-              problem: match.problemId,
-              timeouts: {},
-            });
-          }
-
-          const roomState = activeBattles.get(matchId);
-
-          // Cancel timeouts
-          if (roomState.timeouts[user._id.toString()]) {
-            clearTimeout(roomState.timeouts[user._id.toString()]);
-            delete roomState.timeouts[user._id.toString()];
-            socket.to(matchId).emit("opponentReconnected", { username: user.username });
-            console.log(`[BATTLE] Operator ${user.username} reconnected.`);
-          }
-
-          if (match.player1Id._id.toString() === user._id.toString()) {
-            roomState.player1Socket = socket.id;
-          } else if (match.player2Id._id.toString() === user._id.toString()) {
-            roomState.player2Socket = socket.id;
-          }
-
-          if (roomState.player1Socket && roomState.player2Socket) {
-            io.to(matchId).emit("battleStarted", {
-              matchId,
-              problem: {
-                title: match.problemId.title,
-                difficulty: match.problemId.difficulty,
-                statement: match.problemId.statement,
-                constraints: match.problemId.constraints,
-                sampleInput: match.problemId.sampleInput,
-                sampleOutput: match.problemId.sampleOutput,
-              },
-              player1: match.player1Id,
-              player2: match.player2Id,
-            });
-          }
+          // Emit room status update to everyone
+          io.to(matchId).emit("roomStatusUpdate", populatedRoom);
         }
       } catch (err) {
         console.error("[SOCKET joinRoom ERROR]", err);
-        socket.emit("error", { message: "Internal lobby routing error" });
+        socket.emit("error", { message: "Internal lobby room error" });
       }
     });
 
-    // Keystroke status relays
+    // Admin opponent selection
+    socket.on("selectOpponent", async (data) => {
+      const { roomCode, opponentId } = data;
+      const u = socket.user;
+      if (!u) return;
+
+      try {
+        const room = await Room.findOne({ roomCode });
+        if (room && room.admin.toString() === u._id.toString()) {
+          room.selectedOpponent = opponentId || null;
+          await room.save();
+
+          const populated = await Room.findOne({ roomCode })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("problemId");
+
+          // Update activeBattle state
+          if (activeBattles.has(roomCode)) {
+            const state = activeBattles.get(roomCode);
+            state.player2Socket = opponentId ? onlineUsers.get(opponentId.toString()) : null;
+          }
+
+          io.to(roomCode).emit("opponent_selected", { selectedOpponent: populated.selectedOpponent });
+          io.to(roomCode).emit("roomStatusUpdate", populated);
+        }
+      } catch (err) {
+        console.error("[SELECT OPPONENT ERROR]", err);
+      }
+    });
+
+    // Admin kicks participant
+    socket.on("removeUser", async (data) => {
+      const { roomCode, userIdToRemove } = data;
+      const u = socket.user;
+      if (!u) return;
+
+      try {
+        const room = await Room.findOne({ roomCode });
+        if (room && room.admin.toString() === u._id.toString()) {
+          room.participants = room.participants.filter(p => p.toString() !== userIdToRemove);
+          if (room.selectedOpponent && room.selectedOpponent.toString() === userIdToRemove) {
+            room.selectedOpponent = null;
+          }
+          await room.save();
+
+          // Emit kicked notification directly to user
+          const kickedSocketId = onlineUsers.get(userIdToRemove);
+          if (kickedSocketId) {
+            io.to(kickedSocketId).emit("player_removed", { roomCode });
+          }
+
+          const populated = await Room.findOne({ roomCode })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("problemId");
+
+          io.to(roomCode).emit("roomStatusUpdate", populated);
+        }
+      } catch (err) {
+        console.error("[REMOVE USER ERROR]", err);
+      }
+    });
+
+    // Admin initiates start countdown
+    socket.on("startMatch", async (data) => {
+      const { roomCode } = data;
+      const u = socket.user;
+      if (!u) return;
+
+      try {
+        const room = await Room.findOne({ roomCode })
+          .populate("admin")
+          .populate("selectedOpponent");
+
+        if (room && room.admin._id.toString() === u._id.toString()) {
+          if (!room.selectedOpponent) return;
+
+          // Lock players and trigger countdown
+          io.to(roomCode).emit("match_starting");
+
+          room.status = "active";
+          await room.save();
+
+          // Create backend Match
+          const match = await Match.create({
+            player1Id: room.admin._id,
+            player2Id: room.selectedOpponent._id,
+            problemId: room.problemId,
+            status: "ongoing",
+            startTime: Date.now(),
+          });
+
+          // Log match activities
+          await Activity.create({ userId: room.admin._id, type: "match" });
+          await Activity.create({ userId: room.selectedOpponent._id, type: "match" });
+
+          // In-memory state tracking
+          const state = activeBattles.get(roomCode) || { timeouts: {} };
+          state.dbMatchId = match._id.toString();
+          state.startTime = Date.now();
+          activeBattles.set(roomCode, state);
+
+          // Wait 3 seconds countdown, then redirect to fight
+          setTimeout(async () => {
+            const prob = await Problem.findById(room.problemId);
+            io.to(roomCode).emit("match_started", {
+              matchId: roomCode,
+              dbMatchId: match._id.toString(),
+              problem: {
+                title: prob.title,
+                difficulty: prob.difficulty,
+                statement: prob.statement,
+                constraints: prob.constraints,
+                sampleInput: prob.sampleInput,
+                sampleOutput: prob.sampleOutput,
+              },
+              player1: room.admin,
+              player2: room.selectedOpponent,
+            });
+            io.to(roomCode).emit("battleStarted", {
+              matchId: roomCode,
+              problem: prob,
+              player1: room.admin,
+              player2: room.selectedOpponent,
+            });
+          }, 3000);
+        }
+      } catch (err) {
+        console.error("[START MATCH ERROR]", err);
+      }
+    });
+
+    // Admin cancels match countdown
+    socket.on("cancelMatch", async (data) => {
+      const { roomCode } = data;
+      const u = socket.user;
+      if (!u) return;
+
+      try {
+        const room = await Room.findOne({ roomCode });
+        if (room && room.admin.toString() === u._id.toString()) {
+          room.status = "waiting";
+          await room.save();
+          io.to(roomCode).emit("match_cancelled");
+        }
+      } catch (err) {
+        console.error("[CANCEL MATCH ERROR]", err);
+      }
+    });
+
+    // Keystroke typing status relay
     socket.on("opponentStatus", (data) => {
       const { matchId, status } = data || {};
       if (matchId) {
@@ -382,9 +508,9 @@ const handleSocketConnections = (io) => {
     // ==========================================
     socket.on("submitCode", async (data) => {
       const { matchId, code, language } = data || {};
-      const user = socket.user;
+      const u = socket.user;
 
-      if (!user) {
+      if (!u) {
         socket.emit("submissionResult", { success: false, statusDescription: "Auth Failed" });
         return;
       }
@@ -404,7 +530,6 @@ const handleSocketConnections = (io) => {
         let allPassed = true;
         let failResult = null;
 
-        // Iterate through all hidden testcases
         for (let i = 0; i < problem.testcases.length; i++) {
           const tc = problem.testcases[i];
           const execRes = await executeCode(code, language, tc.input, tc.output);
@@ -417,21 +542,31 @@ const handleSocketConnections = (io) => {
         }
 
         if (allPassed) {
-          // Player won the match!
-          const player1Id = match.player1Id.toString();
-          const player2Id = match.player2Id.toString();
-          const isPlayer1 = player1Id === user._id.toString();
+          await Submission.create({
+            userId: u._id,
+            matchId: dbId,
+            problemId: problem._id,
+            code,
+            language,
+            verdict: "Accepted",
+            runtime: "0.12s",
+            memory: "14 MB"
+          });
 
-          const winnerId = user._id;
+          // Log submission activity
+          await Activity.create({ userId: u._id, type: "submission" });
+
+          const player1Id = match.player1Id.toString();
+          const isPlayer1 = player1Id === u._id.toString();
+
+          const winnerId = u._id;
           const endTime = new Date();
           const durationMs = endTime - new Date(match.startTime);
           const durationStr = `${Math.floor(durationMs / 60000)}m ${Math.floor((durationMs % 60000) / 1000)}s`;
 
-          // Simple ELO formula updates
           const eloChangePlayer1 = isPlayer1 ? 20 : -10;
           const eloChangePlayer2 = isPlayer1 ? -10 : 20;
 
-          // Update match database status
           match.status = "ended";
           match.winnerId = winnerId;
           match.endTime = endTime;
@@ -452,7 +587,7 @@ const handleSocketConnections = (io) => {
           }
           await match.save();
 
-          // Apply statistics in User profiles
+          // Update profiles
           const winnerUser = await User.findById(winnerId);
           const loserId = isPlayer1 ? match.player2Id : match.player1Id;
           const loserUser = await User.findById(loserId);
@@ -475,9 +610,11 @@ const handleSocketConnections = (io) => {
             await loserUser.save();
           }
 
+          // Mark Room as ended
+          await Room.findOneAndUpdate({ roomCode: matchId }, { status: "ended" });
+
           socket.emit("submissionResult", { success: true, statusDescription: "Accepted" });
 
-          // Broadcast results to both clients
           io.to(matchId).emit("battleEnded", {
             winnerId: winnerId.toString(),
             duration: durationStr,
@@ -487,7 +624,20 @@ const handleSocketConnections = (io) => {
 
           activeBattles.delete(matchId);
         } else {
-          // Verdict failed
+          await Submission.create({
+            userId: u._id,
+            matchId: dbId,
+            problemId: problem._id,
+            code,
+            language,
+            verdict: failResult.statusDescription || "Wrong Answer",
+            runtime: failResult.time || "0s",
+            memory: failResult.memory || "0 KB"
+          });
+
+          // Log submission activity
+          await Activity.create({ userId: u._id, type: "submission" });
+
           socket.emit("submissionResult", {
             success: false,
             statusDescription: failResult.statusDescription || "Wrong Answer",
@@ -501,39 +651,108 @@ const handleSocketConnections = (io) => {
       }
     });
 
+    // Autosave listener
+    socket.on("autosaveCode", async (data) => {
+      const { matchId, code } = data || {};
+      const u = socket.user;
+      if (!u || !matchId) return;
+
+      try {
+        const roomState = activeBattles.get(matchId);
+        const dbId = roomState ? (roomState.dbMatchId || matchId) : matchId;
+        const match = await Match.findById(dbId);
+        if (match && match.status === "ongoing") {
+          if (match.player1Id.toString() === u._id.toString()) {
+            match.player1Code = code;
+          } else if (match.player2Id.toString() === u._id.toString()) {
+            match.player2Code = code;
+          }
+          await match.save();
+        }
+      } catch (err) {
+        console.error("[SOCKET autosaveCode ERROR]", err.message);
+      }
+    });
+
     // ==========================================
-    // 5. DISCONNECTION HANDLERS
+    // 5. DISCONNECTION HANDLER
     // ==========================================
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       console.log(`[SOCKET] Node disconnected: ${socket.id}`);
-      
-      // Purge socket from matchmaking queue
-      matchmakingQueue = matchmakingQueue.filter((q) => q.socketId !== socket.id);
 
-      // Check if player was in an active battle
+      const u = socket.user;
+      if (!u) return;
+
+      // Clean up maps
+      onlineUsers.delete(u._id.toString());
+
+      // Update MongoDB status
+      await User.findByIdAndUpdate(u._id, { status: "offline", lastSeen: new Date() });
+
+      // Broadcast offline status to friends
+      const userWithFriends = await User.findById(u._id).select("friends");
+      if (userWithFriends && userWithFriends.friends) {
+        userWithFriends.friends.forEach((friendId) => {
+          io.to(friendId.toString()).emit("friendPresenceChange", {
+            userId: u._id.toString(),
+            status: "offline",
+          });
+        });
+      }
+
+      // Remove from matchmaking queue
+      await Matchmaking.deleteOne({ userId: u._id });
+
+      // Check if lobby user disconnected (waiting status room)
+      const waitingRooms = await Room.find({ participants: u._id, status: "waiting" });
+      for (const r of waitingRooms) {
+        r.participants = r.participants.filter(p => p.toString() !== u._id.toString());
+        
+        if (r.participants.length === 0) {
+          r.status = "ended";
+        } else if (r.admin.toString() === u._id.toString()) {
+          r.admin = r.participants[0];
+        }
+        
+        if (r.selectedOpponent && r.selectedOpponent.toString() === u._id.toString()) {
+          r.selectedOpponent = null;
+        }
+        
+        await r.save();
+
+        io.to(r.roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
+
+        const populated = await Room.findOne({ roomCode: r.roomCode })
+          .populate("admin", "username avatarUrl elo status wins losses")
+          .populate("participants", "username avatarUrl elo status wins losses")
+          .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+          .populate("problemId");
+
+        if (populated) {
+          io.to(r.roomCode).emit("roomStatusUpdate", populated);
+        }
+      }
+
+      // Check if active battle player disconnected
       for (const [matchId, roomState] of activeBattles.entries()) {
         const isPlayer1 = roomState.player1Socket === socket.id;
         const isPlayer2 = roomState.player2Socket === socket.id;
-
         if (isPlayer1 || isPlayer2) {
-          const userId = isPlayer1 ? "player1" : "player2";
-          console.log(`[BATTLE] Socked player ${userId} disconnected from room ${matchId}. starting grace countdown...`);
+          const userIdStr = u._id.toString();
+          console.log(`[BATTLE] Player ${u.username} disconnected from active room ${matchId}. Starting forfeit timer...`);
 
-          // Relay status alert to the remaining player
-          socket.to(matchId).emit("opponentDisconnected", { message: "Opponent connection lost. Standby for forfeit..." });
+          socket.to(matchId).emit("opponentDisconnected", { message: `${u.username} connection lost. Standby for forfeit...` });
 
-          // Start 15s forfeit grace timeout
-          roomState.timeouts[userId] = setTimeout(async () => {
+          roomState.timeouts[userIdStr] = setTimeout(async () => {
             try {
               const match = await Match.findById(roomState.dbMatchId || matchId);
               if (match && match.status === "ongoing") {
-                const p1Disconnected = isPlayer1;
-                const winnerId = p1Disconnected ? match.player2Id : match.player1Id;
-                const loserId = p1Disconnected ? match.player1Id : match.player2Id;
+                const winnerId = isPlayer1 ? match.player2Id : match.player1Id;
+                const loserId = isPlayer1 ? match.player1Id : match.player2Id;
 
-                const eloChangePlayer1 = p1Disconnected ? -10 : 20;
-                const eloChangePlayer2 = p1Disconnected ? 20 : -10;
+                const eloChangePlayer1 = isPlayer1 ? -10 : 20;
+                const eloChangePlayer2 = isPlayer1 ? 20 : -10;
 
                 match.status = "ended";
                 match.winnerId = winnerId;
@@ -541,11 +760,10 @@ const handleSocketConnections = (io) => {
                 match.duration = "Forfeit (Connection Loss)";
                 match.eloChangePlayer1 = eloChangePlayer1;
                 match.eloChangePlayer2 = eloChangePlayer2;
-                match.player1Verdict = p1Disconnected ? "Forfeit" : "Accepted";
-                match.player2Verdict = p1Disconnected ? "Accepted" : "Forfeit";
+                match.player1Verdict = isPlayer1 ? "Forfeit" : "Accepted";
+                match.player2Verdict = isPlayer1 ? "Accepted" : "Forfeit";
                 await match.save();
 
-                // Apply ratings changes
                 const winUser = await User.findById(winnerId);
                 if (winUser) {
                   winUser.elo = Math.max(100, winUser.elo + 20);
@@ -560,6 +778,8 @@ const handleSocketConnections = (io) => {
                   await loseUser.save();
                 }
 
+                await Room.findOneAndUpdate({ roomCode: matchId }, { status: "ended" });
+
                 io.to(matchId).emit("battleEnded", {
                   winnerId: winnerId.toString(),
                   duration: "Forfeit",
@@ -568,7 +788,7 @@ const handleSocketConnections = (io) => {
                 });
               }
             } catch (err) {
-              console.error("[DISCONNECT FORFEIT ERROR]", err);
+              console.error("[FORFEIT GRACE ERROR]", err);
             } finally {
               activeBattles.delete(matchId);
             }
@@ -579,4 +799,4 @@ const handleSocketConnections = (io) => {
   });
 };
 
-module.exports = { handleSocketConnections };
+module.exports = { handleSocketConnections, onlineUsers };

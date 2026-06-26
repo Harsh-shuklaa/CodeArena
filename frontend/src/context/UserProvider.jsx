@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import io from "socket.io-client";
 import { UserContext } from "./UserContext";
 
@@ -16,10 +16,11 @@ const DEFAULT_USER = {
   wins: 0,
   losses: 0,
   isLoggedIn: false,
-  friends: [{ username: "Aryan_99", status: "online" }],
+  friends: [],
   friendRequests: [],
   notifications: [],
-  matches: []
+  matches: [],
+  achievements: []
 };
 
 export function UserProvider({ children }) {
@@ -28,8 +29,7 @@ export function UserProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // Establish socket connection
-  const connectSocket = (token) => {
-    // Disconnect existing socket first
+  const connectSocket = useCallback((token) => {
     if (socket) {
       socket.disconnect();
     }
@@ -44,13 +44,56 @@ export function UserProvider({ children }) {
       console.log("[SOCKET] Connected to real-time server");
     });
 
-    newSocket.on("guestAssigned", (guestUser) => {
-      console.log("[SOCKET] Assigned guest profile:", guestUser.username);
-      setUser((prev) => ({
-        ...prev,
-        ...guestUser,
-        isLoggedIn: false
-      }));
+    // Real-time notification handler
+    newSocket.on("newNotification", (notif) => {
+      setUser((prev) => {
+        const alreadyExists = prev.notifications.some(n => n.id === notif.id);
+        if (alreadyExists) return prev;
+        
+        const updatedNotifications = [notif, ...prev.notifications];
+        let updatedRequests = [...prev.friendRequests];
+        
+        const senderUsername = notif.data?.senderUsername || notif.from;
+        if (notif.type === "friend_request" && senderUsername && !updatedRequests.some(r => r.from === senderUsername)) {
+          updatedRequests.push({ from: senderUsername });
+        }
+        
+        return {
+          ...prev,
+          notifications: updatedNotifications,
+          friendRequests: updatedRequests
+        };
+      });
+    });
+
+    // Real-time friend status update handler
+    newSocket.on("friendPresenceChange", (data) => {
+      setUser((prev) => {
+        const updatedFriends = prev.friends.map(f => {
+          if (f._id === data.userId || f.username === data.userId) {
+            return { ...f, status: data.status };
+          }
+          return f;
+        });
+        return { ...prev, friends: updatedFriends };
+      });
+    });
+
+    // Real-time friend add reload handler
+    newSocket.on("friendAdded", async () => {
+      const activeToken = localStorage.getItem("codearena_token");
+      if (!activeToken) return;
+      try {
+        const refreshedRes = await fetch(`${API_URL}/api/user/friends/list`, {
+          headers: { "Authorization": `Bearer ${activeToken}` }
+        });
+        if (refreshedRes.ok) {
+          const refreshedFriends = await refreshedRes.json();
+          setUser((prev) => ({ ...prev, friends: refreshedFriends }));
+        }
+      } catch (err) {
+        console.error("Error refreshing friends after addition", err);
+      }
     });
 
     newSocket.on("error", (err) => {
@@ -58,7 +101,48 @@ export function UserProvider({ children }) {
     });
 
     return newSocket;
-  };
+  }, [socket]);
+
+  // Helper to load friends and notifications
+  const loadUserData = useCallback(async (token, userData) => {
+    try {
+      // Fetch friends
+      const friendsRes = await fetch(`${API_URL}/api/user/friends/list`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const friends = friendsRes.ok ? await friendsRes.json() : [];
+
+      // Fetch notifications
+      const notifsRes = await fetch(`${API_URL}/api/notification`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const notifications = notifsRes.ok ? await notifsRes.json() : [];
+      const friendRequests = notifications
+        .filter((n) => n.type === "friend_request")
+        .map((n) => ({ from: n.data?.senderUsername || n.from }));
+
+      setUser({
+        ...userData,
+        isLoggedIn: true,
+        friends,
+        friendRequests,
+        notifications,
+        matches: userData.matches || [],
+        achievements: userData.achievements || []
+      });
+    } catch (err) {
+      console.error("Failed to load user relations", err);
+      setUser({
+        ...userData,
+        isLoggedIn: true,
+        friends: [],
+        friendRequests: [],
+        notifications: [],
+        matches: [],
+        achievements: []
+      });
+    }
+  }, []);
 
   // Restore session on mount
   useEffect(() => {
@@ -73,14 +157,7 @@ export function UserProvider({ children }) {
           });
           if (res.ok) {
             const data = await res.json();
-            setUser({
-              ...data.user,
-              isLoggedIn: true,
-              friends: [{ username: "Aryan_99", status: "online" }],
-              friendRequests: [],
-              notifications: [],
-              matches: []
-            });
+            await loadUserData(token, data.user);
             connectSocket(token);
           } else {
             console.warn("Session token expired or invalid");
@@ -107,7 +184,15 @@ export function UserProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (email, password) => {
+  // Emit register-user when socket and user._id are ready
+  useEffect(() => {
+    if (socket && user && user.isLoggedIn && user._id) {
+      socket.emit("register-user", user._id.toString());
+      console.log(`[SOCKET] Emitted register-user for user ${user.username} (${user._id})`);
+    }
+  }, [socket, user]);
+
+  const login = useCallback(async (email, password) => {
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
@@ -121,23 +206,16 @@ export function UserProvider({ children }) {
       }
 
       localStorage.setItem("codearena_token", data.token);
-      setUser({
-        ...data.user,
-        isLoggedIn: true,
-        friends: [{ username: "Aryan_99", status: "online" }],
-        friendRequests: [],
-        notifications: [],
-        matches: []
-      });
+      await loadUserData(data.token, data.user);
       connectSocket(data.token);
       return { success: true };
     } catch (error) {
       console.error("[LOGIN ERROR]", error);
       return { success: false, message: error.message };
     }
-  };
+  }, [connectSocket, loadUserData]);
 
-  const signup = async (email, username, selectedClass, avatarUrl, password) => {
+  const signup = useCallback(async (email, username, selectedClass, avatarUrl, password) => {
     try {
       const res = await fetch(`${API_URL}/api/auth/signup`, {
         method: "POST",
@@ -151,96 +229,159 @@ export function UserProvider({ children }) {
       }
 
       localStorage.setItem("codearena_token", data.token);
-      setUser({
-        ...data.user,
-        isLoggedIn: true,
-        friends: [{ username: "Aryan_99", status: "online" }],
-        friendRequests: [],
-        notifications: [],
-        matches: []
-      });
+      await loadUserData(data.token, data.user);
       connectSocket(data.token);
       return { success: true };
     } catch (error) {
       console.error("[SIGNUP ERROR]", error);
       return { success: false, message: error.message };
     }
-  };
+  }, [connectSocket, loadUserData]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("codearena_token");
     setUser(DEFAULT_USER);
     connectSocket(null);
-  };
+  }, [connectSocket]);
 
-  const updateAvatar = (newAvatarUrl) => {
-    setUser((prev) => ({ ...prev, avatarUrl: newAvatarUrl }));
-  };
+  const updateAvatar = useCallback(async (newAvatarUrl) => {
+    const token = localStorage.getItem("codearena_token");
+    if (!token) return;
 
-  const updateProfile = (updatedFields) => {
+    try {
+      const res = await fetch(`${API_URL}/api/user/profile/update`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ avatarUrl: newAvatarUrl })
+      });
+      if (res.ok) {
+        setUser((prev) => ({ ...prev, avatarUrl: newAvatarUrl }));
+      }
+    } catch (err) {
+      console.error("Failed to persist avatar update in database", err);
+    }
+  }, []);
+
+  const updateProfile = useCallback((updatedFields) => {
     setUser((prev) => ({ ...prev, ...updatedFields }));
-  };
+  }, []);
 
-  // Keep simulated friend functions intact to support front-end bento lists
-  const sendFriendRequest = (targetUsername) => {
+  const sendFriendRequest = useCallback(async (targetUsername) => {
     if (!targetUsername) return;
-    const cleanTarget = targetUsername.trim();
-    const alertId = Math.random().toString(36).substring(7);
-    const mockRequestAlert = {
-      id: alertId,
-      type: "system",
-      text: `Friend request sent to ${cleanTarget} successfully.`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setUser((prev) => ({
-      ...prev,
-      notifications: [mockRequestAlert, ...prev.notifications]
-    }));
-  };
+    const token = localStorage.getItem("codearena_token");
+    if (!token) return;
 
-  const acceptFriendRequest = (fromUsername) => {
-    setUser((prev) => {
-      const cleanRequests = prev.friendRequests.filter(r => r.from !== fromUsername);
-      const isAlreadyFriend = prev.friends.some(f => f.username === fromUsername);
-      const newFriends = isAlreadyFriend ? prev.friends : [...prev.friends, { username: fromUsername, status: "online" }];
-      const systemAlert = {
-        id: Math.random().toString(36).substring(7),
-        type: "system",
-        text: `You and ${fromUsername} are now connected.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      const cleanNotifications = prev.notifications.filter(
-        n => !(n.type === "friend_request" && n.from === fromUsername)
-      );
-      return {
-        ...prev,
-        friends: newFriends,
-        friendRequests: cleanRequests,
-        notifications: [systemAlert, ...cleanNotifications]
-      };
-    });
-  };
+    try {
+      const res = await fetch(`${API_URL}/api/user/friend-request/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ username: targetUsername })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const feedbackAlert = {
+          id: Math.random().toString(36).substring(7),
+          type: "system",
+          message: `Friend request sent to ${targetUsername} successfully.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setUser((prev) => ({
+          ...prev,
+          notifications: [feedbackAlert, ...prev.notifications]
+        }));
+      } else {
+        alert(data.message || "Failed to send friend request.");
+      }
+    } catch (err) {
+      console.error("Error sending friend request", err);
+    }
+  }, []);
 
-  const rejectFriendRequest = (fromUsername) => {
-    setUser((prev) => {
-      const cleanRequests = prev.friendRequests.filter(r => r.from !== fromUsername);
-      const cleanNotifications = prev.notifications.filter(
-        n => !(n.type === "friend_request" && n.from === fromUsername)
-      );
-      return {
-        ...prev,
-        friendRequests: cleanRequests,
-        notifications: cleanNotifications
-      };
-    });
-  };
+  const acceptFriendRequest = useCallback(async (fromUsername) => {
+    const token = localStorage.getItem("codearena_token");
+    if (!token) return;
 
-  const addNotification = (type, from, text, roomId = null) => {
+    try {
+      const res = await fetch(`${API_URL}/api/user/friend-request/respond`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ senderUsername: fromUsername, action: "accept" })
+      });
+
+      if (res.ok) {
+        setUser((prev) => {
+          const cleanRequests = prev.friendRequests.filter(r => r.from !== fromUsername);
+          const isAlreadyFriend = prev.friends.some(f => f.username === fromUsername);
+          const newFriends = isAlreadyFriend ? prev.friends : [...prev.friends, { username: fromUsername, status: "online" }];
+          const systemAlert = {
+            id: Math.random().toString(36).substring(7),
+            type: "system",
+            message: `You and ${fromUsername} are now connected.`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          const cleanNotifications = prev.notifications.filter(
+            n => !((n.type === "friend_request" && (n.data?.senderUsername === fromUsername || n.from === fromUsername)))
+          );
+          return {
+            ...prev,
+            friends: newFriends,
+            friendRequests: cleanRequests,
+            notifications: [systemAlert, ...cleanNotifications]
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Error accepting request", err);
+    }
+  }, []);
+
+  const rejectFriendRequest = useCallback(async (fromUsername) => {
+    const token = localStorage.getItem("codearena_token");
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/user/friend-request/respond`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ senderUsername: fromUsername, action: "reject" })
+      });
+
+      if (res.ok) {
+        setUser((prev) => {
+          const cleanRequests = prev.friendRequests.filter(r => r.from !== fromUsername);
+          const cleanNotifications = prev.notifications.filter(
+            n => !((n.type === "friend_request" && (n.data?.senderUsername === fromUsername || n.from === fromUsername)))
+          );
+          return {
+            ...prev,
+            friendRequests: cleanRequests,
+            notifications: cleanNotifications
+          };
+        });
+      }
+    } catch (err) {
+      console.error("Error rejecting request", err);
+    }
+  }, []);
+
+  const addNotification = useCallback((type, from, message, roomId = null) => {
     const newAlert = {
       id: Math.random().toString(36).substring(7),
       type,
       from,
-      text,
+      message,
       roomId,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
@@ -255,16 +396,31 @@ export function UserProvider({ children }) {
         notifications: [newAlert, ...prev.notifications]
       };
     });
-  };
+  }, []);
 
-  const clearNotification = (id) => {
-    setUser((prev) => ({
-      ...prev,
-      notifications: prev.notifications.filter(n => n.id !== id)
-    }));
-  };
+  const clearNotification = useCallback(async (id) => {
+    const token = localStorage.getItem("codearena_token");
+    if (!token) return;
 
-  const refreshUserStats = async () => {
+    try {
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+      if (isObjectId) {
+        await fetch(`${API_URL}/api/notification/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+      }
+
+      setUser((prev) => ({
+        ...prev,
+        notifications: prev.notifications.filter(n => n.id !== id)
+      }));
+    } catch (err) {
+      console.error("Error clearing notification", err);
+    }
+  }, []);
+
+  const refreshUserStats = useCallback(async () => {
     const token = localStorage.getItem("codearena_token");
     if (!token) return;
     try {
@@ -281,7 +437,7 @@ export function UserProvider({ children }) {
     } catch (e) {
       console.error("Failed to refresh user stats", e);
     }
-  };
+  }, []);
 
   return (
     <UserContext.Provider
