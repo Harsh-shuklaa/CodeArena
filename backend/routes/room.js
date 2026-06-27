@@ -145,6 +145,7 @@ router.post("/join", protect, async (req, res) => {
     // Add user as participant if not already in it
     if (!room.participants.includes(req.user._id)) {
       room.participants.push(req.user._id);
+      room.invitedUsers = (room.invitedUsers || []).filter(id => id.toString() !== req.user._id.toString());
       await room.save();
     }
 
@@ -161,7 +162,7 @@ router.post("/join", protect, async (req, res) => {
 
 /**
  * @route   POST /api/room/invite
- * @desc    Invite a friend to join a room lobby
+ * @desc    Invite a friend to join a room lobby (toggles to cancel if already invited)
  * @access  Private
  */
 router.post("/invite", protect, async (req, res) => {
@@ -189,45 +190,87 @@ router.post("/invite", protect, async (req, res) => {
       return res.status(400).json({ message: "Operator is already in this lobby" });
     }
 
-    // Create Notification in database
-    const notification = await Notification.create({
+    // Check if invitation already exists
+    const existingInvite = await Notification.findOne({
       userId: receiver._id,
       type: "room_invite",
-      title: "Room Invitation Received",
-      message: `${req.user.username} invited you to join battle lobby ${roomCode}.`,
-      data: {
-        roomCode,
-        invitedByUsername: req.user.username,
-        invitedByAvatar: req.user.avatarUrl
-      }
+      "data.roomCode": roomCode
     });
 
-    // Real-time socket emit
     const io = req.app.get("io");
-    if (io) {
-      const formattedNotif = {
-        id: notification._id,
-        type: notification.type,
-        title: notification.title,
-        message: notification.message,
-        data: notification.data,
-        isRead: false,
-        timestamp: new Date(notification.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      };
 
-      // Retrieve receiver's socket ID from onlineUsers map
-      const onlineUsers = req.app.get("onlineUsers");
-      const socketId = onlineUsers ? onlineUsers.get(receiver._id.toString()) : null;
+    if (existingInvite) {
+      // 1. Cancel the invitation
+      await Notification.deleteOne({ _id: existingInvite._id });
 
-      if (socketId) {
-        io.to(socketId).emit("newNotification", formattedNotif);
-      } else {
-        // Fallback to direct room ID broadcast
+      room.invitedUsers = (room.invitedUsers || []).filter(id => id.toString() !== receiver._id.toString());
+      await room.save();
+
+      if (io) {
+        io.to(receiver._id.toString()).emit("removeNotification", { id: existingInvite._id.toString() });
+      }
+
+      // Populate & Broadcast updated room status to all lobby participants (since invitedUsers list changed)
+      const populated = await Room.findOne({ roomCode })
+        .populate("admin", "username avatarUrl elo status wins losses")
+        .populate("participants", "username avatarUrl elo status wins losses")
+        .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+        .populate("readyUsers", "username avatarUrl elo status wins losses")
+        .populate("invitedUsers", "username avatarUrl elo status wins losses")
+        .populate("problemId");
+
+      if (io && populated) {
+        io.to(roomCode).emit("roomStatusUpdate", populated);
+      }
+
+      return res.json({ success: true, action: "cancelled", message: "Invitation retracted successfully." });
+    } else {
+      // 2. Create/Send the invitation
+      const notification = await Notification.create({
+        userId: receiver._id,
+        type: "room_invite",
+        title: "Room Invitation Received",
+        message: `${req.user.username} invited you to join battle lobby ${roomCode}.`,
+        data: {
+          roomCode,
+          invitedByUsername: req.user.username,
+          invitedByAvatar: req.user.avatarUrl
+        }
+      });
+
+      if (!room.invitedUsers.includes(receiver._id)) {
+        room.invitedUsers.push(receiver._id);
+        await room.save();
+      }
+
+      if (io) {
+        const formattedNotif = {
+          id: notification._id,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          data: notification.data,
+          isRead: false,
+          timestamp: new Date(notification.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        };
         io.to(receiver._id.toString()).emit("newNotification", formattedNotif);
       }
-    }
 
-    res.json({ success: true, message: "Invitation transmitted successfully." });
+      // Populate & Broadcast updated room status to all lobby participants
+      const populated = await Room.findOne({ roomCode })
+        .populate("admin", "username avatarUrl elo status wins losses")
+        .populate("participants", "username avatarUrl elo status wins losses")
+        .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+        .populate("readyUsers", "username avatarUrl elo status wins losses")
+        .populate("invitedUsers", "username avatarUrl elo status wins losses")
+        .populate("problemId");
+
+      if (io && populated) {
+        io.to(roomCode).emit("roomStatusUpdate", populated);
+      }
+
+      return res.json({ success: true, action: "sent", message: "Invitation transmitted successfully." });
+    }
   } catch (error) {
     console.error("[ROOM INVITE ERROR]", error);
     res.status(500).json({ message: "Server error sending invite" });

@@ -12,7 +12,6 @@ export default function Dashboard() {
     sendFriendRequest,
     acceptFriendRequest,
     rejectFriendRequest,
-    clearNotification,
     updateProfile
   } = useContext(UserContext);
 
@@ -322,70 +321,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Holographic Notification Center */}
-          {notifications.length > 0 && (
-            <div className="mb-8 space-y-3 animate-fade-in text-left">
-              <h4 className="text-[10px] font-bold text-secondary font-mono tracking-widest flex items-center gap-2 uppercase">
-                <Bell className="w-3.5 h-3.5 text-secondary animate-bounce" /> SYSTEM_ALERT_FEEDS
-              </h4>
-              <div className="space-y-2">
-                {notifications.map((n) => (
-                  <div key={n.id} className="glass-panel p-4 rounded-xl border border-secondary/20 bg-secondary/5 flex justify-between items-center gap-4">
-                    <div className="font-mono text-xs text-white leading-relaxed flex items-center gap-3">
-                      <span className="w-2 h-2 rounded-full bg-secondary animate-ping shrink-0"></span>
-                      <span>{n.message || n.text}</span>
-                      <span className="text-[9px] text-on-surface-variant opacity-60">[{n.timestamp}]</span>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      {n.type === "friend_request" && (
-                        <>
-                          <button
-                            onClick={() => acceptFriendRequest(n.from)}
-                            className="bg-secondary text-on-secondary px-3 py-1.5 rounded font-mono text-[10px] font-bold flex items-center gap-1 hover:brightness-110"
-                          >
-                            <Check className="w-3 h-3" /> ACCEPT
-                          </button>
-                          <button
-                            onClick={() => rejectFriendRequest(n.from)}
-                            className="border border-error/30 text-error hover:bg-error/10 px-3 py-1.5 rounded font-mono text-[10px] font-bold flex items-center gap-1"
-                          >
-                            <X className="w-3 h-3" /> DECLINE
-                          </button>
-                        </>
-                      )}
-                      {n.type === "room_invite" && (
-                        <>
-                          <button
-                            onClick={() => {
-                              clearNotification(n.id);
-                              navigate(`/battle/${n.roomId}`);
-                            }}
-                            className="bg-primary text-on-primary px-3 py-1.5 rounded font-mono text-[10px] font-bold flex items-center gap-1 hover:brightness-110"
-                          >
-                            <Swords className="w-3 h-3" /> JOIN LOBBY
-                          </button>
-                          <button
-                            onClick={() => clearNotification(n.id)}
-                            className="border border-white/10 hover:bg-white/5 text-on-surface-variant px-3 py-1.5 rounded font-mono text-[10px] font-bold"
-                          >
-                            DISMISS
-                          </button>
-                        </>
-                      )}
-                      {n.type === "system" && (
-                        <button
-                          onClick={() => clearNotification(n.id)}
-                          className="border border-white/10 hover:bg-white/5 text-on-surface-variant px-3 py-1 rounded font-mono text-[9px] font-bold"
-                        >
-                          DISMISS
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Grid Layout */}
           <div className="grid grid-cols-12 gap-6 text-left">

@@ -47,7 +47,7 @@ export function UserProvider({ children }) {
     // Real-time notification handler
     newSocket.on("newNotification", (notif) => {
       setUser((prev) => {
-        const alreadyExists = prev.notifications.some(n => n.id === notif.id);
+        const alreadyExists = prev.notifications.some(n => n.id === notif.id || n._id === notif.id);
         if (alreadyExists) return prev;
         
         const updatedNotifications = [notif, ...prev.notifications];
@@ -62,6 +62,23 @@ export function UserProvider({ children }) {
           ...prev,
           notifications: updatedNotifications,
           friendRequests: updatedRequests
+        };
+      });
+    });
+
+    // Real-time notification retraction handler
+    newSocket.on("removeNotification", (data) => {
+      console.log("[SOCKET DEBUG] removeNotification received:", data);
+      setUser((prev) => {
+        const remaining = prev.notifications.filter(n => {
+          const isMatch = (n.id && n.id.toString() === data.id) || 
+                          (n._id && n._id.toString() === data.id);
+          return !isMatch;
+        });
+        console.log("[SOCKET DEBUG] Notifications count after retraction:", remaining.length);
+        return {
+          ...prev,
+          notifications: remaining
         };
       });
     });
@@ -190,7 +207,8 @@ export function UserProvider({ children }) {
       socket.emit("register-user", user._id.toString());
       console.log(`[SOCKET] Emitted register-user for user ${user.username} (${user._id})`);
     }
-  }, [socket, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, user?._id, user?.isLoggedIn]);
 
   const login = useCallback(async (email, password) => {
     try {

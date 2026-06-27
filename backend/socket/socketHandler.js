@@ -7,7 +7,9 @@ const Notification = require("../models/Notification");
 const Room = require("../models/Room");
 const Matchmaking = require("../models/Matchmaking");
 const Submission = require("../models/Submission");
+const Activity = require("../models/Activity");
 const { executeCode } = require("../services/judge0");
+const mongoose = require("mongoose");
 
 // Track active battle room details in memory: { matchId: { player1Socket, player2Socket, startTime, problem } }
 const activeBattles = new Map();
@@ -107,9 +109,11 @@ const handleSocketConnections = (io) => {
     // ==========================================
 
     socket.on("joinQueue", async (data) => {
+      console.log(`[MATCHMAKING DEBUG] joinQueue event received from user: ${socket.user?.username || "unknown"} (socket ID: ${socket.id})`);
       try {
         const u = socket.user || (data?.token ? await verifyUserToken(data.token) : null);
         if (!u) {
+          console.log("[MATCHMAKING DEBUG] Rejected joinQueue: u is undefined");
           socket.emit("error", { message: "Invalid session credentials" });
           return;
         }
@@ -118,24 +122,63 @@ const handleSocketConnections = (io) => {
         // Prevent duplicate entries
         await Matchmaking.deleteOne({ userId: u._id });
 
-        // User cannot join queue if already in an active room
-        const activeRoom = await Room.findOne({
-          participants: u._id,
-          status: { $in: ["waiting", "active"] }
+        // Scrub user from any waiting lobbies before entering queue
+        const waitingRooms = await Room.find({ participants: u._id, status: "waiting" });
+        console.log(`[MATCHMAKING DEBUG] Found ${waitingRooms.length} waiting rooms to scrub for user ${u.username}`);
+        for (const r of waitingRooms) {
+          try {
+            r.participants = r.participants.filter(p => p.toString() !== u._id.toString());
+            r.readyUsers = (r.readyUsers || []).filter(p => p.toString() !== u._id.toString());
+            if (r.selectedOpponent && r.selectedOpponent.toString() === u._id.toString()) {
+              r.selectedOpponent = null;
+            }
+            if (r.participants.length === 0) {
+              r.status = "ended";
+            } else if (r.admin && r.admin.toString() === u._id.toString()) {
+              r.admin = r.participants[0];
+            }
+            await r.save();
+
+            io.to(r.roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
+
+            const populated = await Room.findOne({ roomCode: r.roomCode })
+              .populate("admin", "username avatarUrl elo status wins losses")
+              .populate("participants", "username avatarUrl elo status wins losses")
+              .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+              .populate("readyUsers", "username avatarUrl elo status wins losses")
+              .populate("invitedUsers", "username avatarUrl elo status wins losses")
+              .populate("problemId");
+
+            if (populated) {
+              io.to(r.roomCode).emit("roomStatusUpdate", populated);
+            }
+          } catch (err) {
+            console.error(`[MATCHMAKING PRE-CLEANUP ERROR] Failed to clean room ${r.roomCode}:`, err.message);
+          }
+        }
+
+        // Only block queueing if they are in a live ongoing database Match
+        const activeMatch = await Match.findOne({
+          $or: [
+            { player1Id: u._id },
+            { player2Id: u._id }
+          ],
+          status: "ongoing"
         });
-        if (activeRoom) {
-          socket.emit("error", { message: "User cannot join queue if already in a room." });
+        if (activeMatch) {
+          console.log(`[MATCHMAKING DEBUG] Rejected joinQueue: User ${u.username} is already in active match ${activeMatch._id}`);
+          socket.emit("error", { message: "User cannot join queue if already in an active match." });
           return;
         }
 
         console.log(`[MATCHMAKING] User ${u.username} entering MongoDB queue.`);
 
-        // Insert into matchmaking collection
-        await Matchmaking.create({
-          userId: u._id,
-          status: "waiting",
-          joinedAt: new Date()
-        });
+        // Atomic Upsert to prevent duplicate key E11000 errors
+        await Matchmaking.findOneAndUpdate(
+          { userId: u._id },
+          { status: "waiting", joinedAt: new Date() },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
 
         socket.emit("queueJoined", { message: "Searching for similar operators..." });
 
@@ -145,104 +188,126 @@ const handleSocketConnections = (io) => {
           .populate("userId");
 
         if (waitingList.length >= 2) {
-          const player1 = waitingList[0];
-          const player2 = waitingList[1];
+          const ids = [waitingList[0]._id, waitingList[1]._id];
 
-          console.log(`[MATCHMAKING] Pairing ${player1.userId.username} vs ${player2.userId.username}`);
+          // Lock these two players atomically to prevent duplicate pairing race conditions
+          const lockResult = await Matchmaking.updateMany(
+            { _id: { $in: ids }, status: "waiting" },
+            { $set: { status: "matching" } }
+          );
 
-          // Remove queue entries
-          await Matchmaking.deleteMany({
-            userId: { $in: [player1.userId._id, player2.userId._id] }
-          });
+          if (lockResult.modifiedCount === 2) {
+            const player1 = waitingList[0];
+            const player2 = waitingList[1];
 
-          // Fetch coding challenge
-          const count = await Problem.countDocuments();
-          let problem;
-          if (count > 0) {
-            const randomIdx = Math.floor(Math.random() * count);
-            problem = await Problem.findOne().skip(randomIdx);
-          } else {
-            problem = await Problem.create({
-              title: "Default Decryption Challenge",
-              difficulty: "Medium",
-              statement: "Reverse a string of packet payloads.",
-              testcases: [{ input: "hello", output: "olleh" }],
+            console.log(`[MATCHMAKING] Pairing ${player1.userId.username} vs ${player2.userId.username}`);
+
+            // Remove queue entries
+            await Matchmaking.deleteMany({
+              userId: { $in: [player1.userId._id, player2.userId._id] }
             });
-          }
 
-          const roomCode = await generateUniqueRoomCode();
-
-          // Create active Room
-          const room = await Room.create({
-            roomCode,
-            admin: player1.userId._id,
-            participants: [player1.userId._id, player2.userId._id],
-            selectedOpponent: player2.userId._id,
-            roomType: "matchmaking",
-            status: "active",
-            problemId: problem._id,
-          });
-
-          // Create Match
-          const match = await Match.create({
-            player1Id: player1.userId._id,
-            player2Id: player2.userId._id,
-            problemId: problem._id,
-            status: "ongoing",
-            startTime: Date.now(),
-          });
-
-          // Log match activities
-          await Activity.create({ userId: player1.userId._id, type: "match" });
-          await Activity.create({ userId: player2.userId._id, type: "match" });
-
-          const p1Socket = onlineUsers.get(player1.userId._id.toString());
-          const p2Socket = onlineUsers.get(player2.userId._id.toString());
-
-          // Emit match_found to both users
-          const matchData = {
-            roomCode,
-            matchId: match._id.toString(),
-            problem: {
-              title: problem.title,
-              difficulty: problem.difficulty,
-              statement: problem.statement,
-              constraints: problem.constraints,
-              sampleInput: problem.sampleInput,
-              sampleOutput: problem.sampleOutput,
+            // Fetch coding challenge
+            const count = await Problem.countDocuments();
+            let problem;
+            if (count > 0) {
+              const randomIdx = Math.floor(Math.random() * count);
+              problem = await Problem.findOne().skip(randomIdx);
+            } else {
+              problem = await Problem.create({
+                title: "Default Decryption Challenge",
+                difficulty: "Medium",
+                statement: "Reverse a string of packet payloads.",
+                testcases: [{ input: "hello", output: "olleh" }],
+              });
             }
-          };
 
-          if (p1Socket) {
-            io.to(p1Socket).emit("match_found", {
-              ...matchData,
-              opponent: {
-                username: player2.userId.username,
-                avatarUrl: player2.userId.avatarUrl,
-                elo: player2.userId.elo,
-                wins: player2.userId.wins,
-                winRate: (player2.userId.wins + player2.userId.losses) > 0 
-                  ? Math.round((player2.userId.wins / (player2.userId.wins + player2.userId.losses)) * 100) 
-                  : 0,
-                status: "online",
-              }
-            });
-          }
+            const roomCode = await generateUniqueRoomCode();
 
-          if (p2Socket) {
-            io.to(p2Socket).emit("match_found", {
-              ...matchData,
-              opponent: {
-                username: player1.userId.username,
-                avatarUrl: player1.userId.avatarUrl,
-                elo: player1.userId.elo,
-                wins: player1.userId.wins,
-                winRate: (player1.userId.wins + player1.userId.losses) > 0 
-                  ? Math.round((player1.userId.wins / (player1.userId.wins + player1.userId.losses)) * 100) 
-                  : 0,
-                status: "online",
-              }
+            // Create active Room
+            const room = await Room.create({
+              roomCode,
+              admin: player1.userId._id,
+              participants: [player1.userId._id, player2.userId._id],
+              selectedOpponent: player2.userId._id,
+              roomType: "matchmaking",
+              status: "active",
+              problemId: problem._id,
             });
+
+            // Create Match
+            const match = await Match.create({
+              player1Id: player1.userId._id,
+              player2Id: player2.userId._id,
+              problemId: problem._id,
+              status: "ongoing",
+              startTime: Date.now(),
+            });
+
+            // Log match activities
+            await Activity.create({ userId: player1.userId._id, type: "match" });
+            await Activity.create({ userId: player2.userId._id, type: "match" });
+
+            const p1Socket = onlineUsers.get(player1.userId._id.toString());
+            const p2Socket = onlineUsers.get(player2.userId._id.toString());
+
+            // In-memory active battle tracking
+            activeBattles.set(roomCode, {
+              matchId: roomCode,
+              dbMatchId: match._id.toString(),
+              admin: player1.userId,
+              player1Socket: p1Socket,
+              player2Socket: p2Socket,
+              startTime: Date.now(),
+              problem: problem,
+              timeouts: {},
+            });
+
+            // Emit match_found to both users
+            const matchData = {
+              roomCode,
+              matchId: match._id.toString(),
+              problem: {
+                title: problem.title,
+                difficulty: problem.difficulty,
+                statement: problem.statement,
+                constraints: problem.constraints,
+                sampleInput: problem.sampleInput,
+                sampleOutput: problem.sampleOutput,
+              }
+            };
+
+            if (p1Socket) {
+              io.to(p1Socket).emit("match_found", {
+                ...matchData,
+                opponent: {
+                  username: player2.userId.username,
+                  avatarUrl: player2.userId.avatarUrl,
+                  elo: player2.userId.elo,
+                  wins: player2.userId.wins,
+                  winRate: (player2.userId.wins + player2.userId.losses) > 0 
+                    ? Math.round((player2.userId.wins / (player2.userId.wins + player2.userId.losses)) * 100) 
+                    : 0,
+                  status: "online",
+                }
+              });
+            }
+
+            if (p2Socket) {
+              io.to(p2Socket).emit("match_found", {
+                ...matchData,
+                opponent: {
+                  username: player1.userId.username,
+                  avatarUrl: player1.userId.avatarUrl,
+                  elo: player1.userId.elo,
+                  wins: player1.userId.wins,
+                  winRate: (player1.userId.wins + player1.userId.losses) > 0 
+                    ? Math.round((player1.userId.wins / (player1.userId.wins + player1.userId.losses)) * 100) 
+                    : 0,
+                  status: "online",
+                }
+              });
+            }
           }
         }
       } catch (err) {
@@ -280,28 +345,44 @@ const handleSocketConnections = (io) => {
         let dbRoom = await Room.findOne({ roomCode: matchId });
         if (dbRoom) {
           const hasJoined = dbRoom.participants.some(p => p.toString() === u._id.toString());
+          
+          // Reset ready status when re-entering/rejoining
+          dbRoom.readyUsers = (dbRoom.readyUsers || []).filter(id => id.toString() !== u._id.toString());
+
           if (!hasJoined) {
             dbRoom.participants.push(u._id);
-            await dbRoom.save();
+            dbRoom.invitedUsers = (dbRoom.invitedUsers || []).filter(id => id.toString() !== u._id.toString());
             io.to(matchId).emit("player_joined_lobby", { userId: u._id.toString(), username: u.username });
           }
+          await dbRoom.save();
 
           // Populate room details
           const populatedRoom = await Room.findOne({ roomCode: matchId })
             .populate("admin", "username avatarUrl elo status wins losses")
             .populate("participants", "username avatarUrl elo status wins losses")
             .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
+            .populate("invitedUsers", "username avatarUrl elo status wins losses")
             .populate("problemId");
 
           // Sync in-memory room mapping if active
           if (!activeBattles.has(matchId)) {
+            // Find if there's an ongoing database Match for these participants
+            const activeMatch = await Match.findOne({
+              $or: [
+                { player1Id: u._id },
+                { player2Id: u._id }
+              ],
+              status: "ongoing"
+            });
+
             activeBattles.set(matchId, {
               matchId,
-              dbMatchId: null,
+              dbMatchId: activeMatch ? activeMatch._id.toString() : null,
               admin: populatedRoom.admin,
               player1Socket: populatedRoom.admin._id.toString() === u._id.toString() ? socket.id : null,
               player2Socket: populatedRoom.selectedOpponent && populatedRoom.selectedOpponent._id.toString() === u._id.toString() ? socket.id : null,
-              startTime: null,
+              startTime: activeMatch ? activeMatch.startTime : null,
               problem: populatedRoom.problemId,
               timeouts: {},
             });
@@ -339,6 +420,7 @@ const handleSocketConnections = (io) => {
             .populate("admin", "username avatarUrl elo status wins losses")
             .populate("participants", "username avatarUrl elo status wins losses")
             .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
             .populate("problemId");
 
           // Update activeBattle state
@@ -365,6 +447,7 @@ const handleSocketConnections = (io) => {
         const room = await Room.findOne({ roomCode });
         if (room && room.admin.toString() === u._id.toString()) {
           room.participants = room.participants.filter(p => p.toString() !== userIdToRemove);
+          room.readyUsers = (room.readyUsers || []).filter(p => p.toString() !== userIdToRemove);
           if (room.selectedOpponent && room.selectedOpponent.toString() === userIdToRemove) {
             room.selectedOpponent = null;
           }
@@ -380,12 +463,147 @@ const handleSocketConnections = (io) => {
             .populate("admin", "username avatarUrl elo status wins losses")
             .populate("participants", "username avatarUrl elo status wins losses")
             .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
+            .populate("invitedUsers", "username avatarUrl elo status wins losses")
             .populate("problemId");
 
           io.to(roomCode).emit("roomStatusUpdate", populated);
         }
       } catch (err) {
         console.error("[REMOVE USER ERROR]", err);
+      }
+    });
+
+    // Participant leaves room cleanly
+    socket.on("leaveRoom", async (data) => {
+      const { roomCode } = data || {};
+      const u = socket.user;
+      if (!u || !roomCode) return;
+
+      try {
+        console.log(`[LOBBY] User ${u.username} leaving room ${roomCode}`);
+        socket.leave(roomCode);
+
+        const room = await Room.findOne({ roomCode });
+        if (room) {
+          room.participants = room.participants.filter(p => p.toString() !== u._id.toString());
+          room.readyUsers = (room.readyUsers || []).filter(p => p.toString() !== u._id.toString());
+
+          if (room.selectedOpponent && room.selectedOpponent.toString() === u._id.toString()) {
+            room.selectedOpponent = null;
+          }
+
+          if (room.participants.length === 0) {
+            room.status = "ended";
+          } else if (room.admin && room.admin.toString() === u._id.toString()) {
+            room.admin = room.participants[0];
+          }
+
+          await room.save();
+
+          // Notify other participants in the room
+          io.to(roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
+
+          const populated = await Room.findOne({ roomCode })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
+            .populate("invitedUsers", "username avatarUrl elo status wins losses")
+            .populate("problemId");
+
+          if (populated) {
+            io.to(roomCode).emit("roomStatusUpdate", populated);
+          }
+        }
+      } catch (err) {
+        console.error("[LEAVE ROOM EVENT ERROR]", err);
+      }
+    });
+
+    // Toggle player ready status
+    socket.on("toggleReady", async (data) => {
+      const { roomCode } = data || {};
+      const u = socket.user;
+      if (!u || !roomCode) return;
+
+      try {
+        const room = await Room.findOne({ roomCode });
+        if (room && room.participants.some(p => p.toString() === u._id.toString())) {
+          const isReady = room.readyUsers.some(id => id.toString() === u._id.toString());
+          if (isReady) {
+            // Set to Not Ready
+            room.readyUsers = room.readyUsers.filter(id => id.toString() !== u._id.toString());
+          } else {
+            // Set to Ready
+            room.readyUsers.push(u._id);
+          }
+          await room.save();
+
+          const populated = await Room.findOne({ roomCode })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
+            .populate("invitedUsers", "username avatarUrl elo status wins losses")
+            .populate("problemId");
+
+          io.to(roomCode).emit("roomStatusUpdate", populated);
+        }
+      } catch (err) {
+        console.error("[TOGGLE READY ERROR]", err);
+      }
+    });
+
+    // Update custom lobby settings (admin only)
+    socket.on("updateLobbySettings", async (data) => {
+      const { roomCode, difficulty, language, spectatorsAllowed } = data || {};
+      const u = socket.user;
+      if (!u || !roomCode) return;
+
+      try {
+        const room = await Room.findOne({ roomCode });
+        if (room && room.admin.toString() === u._id.toString()) {
+          if (difficulty) room.difficulty = difficulty;
+          if (language) room.language = language;
+          if (typeof spectatorsAllowed === "boolean") room.spectatorsAllowed = spectatorsAllowed;
+          
+          await room.save();
+
+          const populated = await Room.findOne({ roomCode })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
+            .populate("invitedUsers", "username avatarUrl elo status wins losses")
+            .populate("problemId");
+
+          io.to(roomCode).emit("roomStatusUpdate", populated);
+        }
+      } catch (err) {
+        console.error("[UPDATE LOBBY SETTINGS ERROR]", err);
+      }
+    });
+
+    // Lobby Comms (Chat messages)
+    socket.on("chatMessage", async (data) => {
+      const { roomCode, text } = data || {};
+      const u = socket.user;
+      if (!u || !roomCode || !text) return;
+
+      try {
+        const room = await Room.findOne({ roomCode });
+        if (room && room.participants.some(p => p.toString() === u._id.toString())) {
+          // Broadcast chatMessage to everyone in the room
+          io.to(roomCode).emit("chatMessage", {
+            username: u.username,
+            avatarUrl: u.avatarUrl,
+            text: text,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          });
+        }
+      } catch (err) {
+        console.error("[CHAT MESSAGE ERROR]", err);
       }
     });
 
@@ -402,6 +620,32 @@ const handleSocketConnections = (io) => {
 
         if (room && room.admin._id.toString() === u._id.toString()) {
           if (!room.selectedOpponent) return;
+
+          // Check if selected opponent is ready
+          const opponentIdStr = room.selectedOpponent._id.toString();
+          const isOpponentReady = room.readyUsers.some(id => id.toString() === opponentIdStr);
+          if (!isOpponentReady) {
+            socket.emit("error", { message: "Selected opponent must be READY to start the match." });
+            return;
+          }
+
+          // Handle spectators allowed setting
+          if (room.spectatorsAllowed === false) {
+            const allowedIds = [room.admin._id.toString(), room.selectedOpponent._id.toString()];
+            const spectators = room.participants.filter(p => !allowedIds.includes(p.toString()));
+            
+            // Update database arrays
+            room.participants = room.participants.filter(p => allowedIds.includes(p.toString()));
+            room.readyUsers = room.readyUsers.filter(p => allowedIds.includes(p.toString()));
+
+            // Notify spectators they are removed
+            spectators.forEach(specId => {
+              const specSocketId = onlineUsers.get(specId.toString());
+              if (specSocketId) {
+                io.to(specSocketId).emit("player_removed", { roomCode });
+              }
+            });
+          }
 
           // Lock players and trigger countdown
           io.to(roomCode).emit("match_starting");
@@ -519,7 +763,11 @@ const handleSocketConnections = (io) => {
 
       try {
         const roomState = activeBattles.get(matchId);
-        const dbId = roomState ? (roomState.dbMatchId || matchId) : matchId;
+        const dbId = roomState ? roomState.dbMatchId : null;
+        if (!dbId || !mongoose.Types.ObjectId.isValid(dbId)) {
+          socket.emit("submissionResult", { success: false, statusDescription: "Match not found" });
+          return;
+        }
         const match = await Match.findById(dbId).populate("problemId");
         if (!match || match.status === "ended") {
           socket.emit("submissionResult", { success: false, statusDescription: "Match already ended" });
@@ -659,15 +907,17 @@ const handleSocketConnections = (io) => {
 
       try {
         const roomState = activeBattles.get(matchId);
-        const dbId = roomState ? (roomState.dbMatchId || matchId) : matchId;
-        const match = await Match.findById(dbId);
-        if (match && match.status === "ongoing") {
-          if (match.player1Id.toString() === u._id.toString()) {
-            match.player1Code = code;
-          } else if (match.player2Id.toString() === u._id.toString()) {
-            match.player2Code = code;
+        const dbId = roomState ? roomState.dbMatchId : null;
+        if (dbId && mongoose.Types.ObjectId.isValid(dbId)) {
+          const match = await Match.findById(dbId);
+          if (match && match.status === "ongoing") {
+            if (match.player1Id.toString() === u._id.toString()) {
+              match.player1Code = code;
+            } else if (match.player2Id.toString() === u._id.toString()) {
+              match.player2Code = code;
+            }
+            await match.save();
           }
-          await match.save();
         }
       } catch (err) {
         console.error("[SOCKET autosaveCode ERROR]", err.message);
@@ -707,30 +957,37 @@ const handleSocketConnections = (io) => {
       // Check if lobby user disconnected (waiting status room)
       const waitingRooms = await Room.find({ participants: u._id, status: "waiting" });
       for (const r of waitingRooms) {
-        r.participants = r.participants.filter(p => p.toString() !== u._id.toString());
-        
-        if (r.participants.length === 0) {
-          r.status = "ended";
-        } else if (r.admin.toString() === u._id.toString()) {
-          r.admin = r.participants[0];
-        }
-        
-        if (r.selectedOpponent && r.selectedOpponent.toString() === u._id.toString()) {
-          r.selectedOpponent = null;
-        }
-        
-        await r.save();
+        try {
+          r.participants = r.participants.filter(p => p.toString() !== u._id.toString());
+          r.readyUsers = (r.readyUsers || []).filter(p => p.toString() !== u._id.toString());
+          
+          if (r.participants.length === 0) {
+            r.status = "ended";
+          } else if (r.admin.toString() === u._id.toString()) {
+            r.admin = r.participants[0];
+          }
+          
+          if (r.selectedOpponent && r.selectedOpponent.toString() === u._id.toString()) {
+            r.selectedOpponent = null;
+          }
+          
+          await r.save();
 
-        io.to(r.roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
+          io.to(r.roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
 
-        const populated = await Room.findOne({ roomCode: r.roomCode })
-          .populate("admin", "username avatarUrl elo status wins losses")
-          .populate("participants", "username avatarUrl elo status wins losses")
-          .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-          .populate("problemId");
+          const populated = await Room.findOne({ roomCode: r.roomCode })
+            .populate("admin", "username avatarUrl elo status wins losses")
+            .populate("participants", "username avatarUrl elo status wins losses")
+            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
+            .populate("readyUsers", "username avatarUrl elo status wins losses")
+            .populate("invitedUsers", "username avatarUrl elo status wins losses")
+            .populate("problemId");
 
-        if (populated) {
-          io.to(r.roomCode).emit("roomStatusUpdate", populated);
+          if (populated) {
+            io.to(r.roomCode).emit("roomStatusUpdate", populated);
+          }
+        } catch (err) {
+          console.error(`[SOCKET DISCONNECT CLEANUP ERROR] Room ${r.roomCode} update failed:`, err.message);
         }
       }
 
@@ -739,6 +996,11 @@ const handleSocketConnections = (io) => {
         const isPlayer1 = roomState.player1Socket === socket.id;
         const isPlayer2 = roomState.player2Socket === socket.id;
         if (isPlayer1 || isPlayer2) {
+          // Safeguard: Bypasses waiting lobby rooms that haven't transitioned into active database Match records
+          if (!roomState.dbMatchId || !mongoose.Types.ObjectId.isValid(roomState.dbMatchId)) {
+            continue;
+          }
+
           const userIdStr = u._id.toString();
           console.log(`[BATTLE] Player ${u.username} disconnected from active room ${matchId}. Starting forfeit timer...`);
 
@@ -746,7 +1008,7 @@ const handleSocketConnections = (io) => {
 
           roomState.timeouts[userIdStr] = setTimeout(async () => {
             try {
-              const match = await Match.findById(roomState.dbMatchId || matchId);
+              const match = await Match.findById(roomState.dbMatchId);
               if (match && match.status === "ongoing") {
                 const winnerId = isPlayer1 ? match.player2Id : match.player1Id;
                 const loserId = isPlayer1 ? match.player1Id : match.player2Id;

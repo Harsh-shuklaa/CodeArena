@@ -1,12 +1,13 @@
 import { useState, useContext } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Terminal, Menu, X, Swords, LogOut, Users } from "lucide-react";
+import { Terminal, Menu, X, Swords, LogOut, Bell, Check } from "lucide-react";
 import { UserContext } from "../context/UserContext";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const location = useLocation();
-  const { user, logout } = useContext(UserContext);
+  const { user, logout, acceptFriendRequest, rejectFriendRequest, clearNotification } = useContext(UserContext);
 
   const links = user.isLoggedIn
     ? [
@@ -63,6 +64,94 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-4">
           {user.isLoggedIn ? (
             <div className="flex items-center gap-4">
+              {/* Notification Bell */}
+              <div className="relative">
+                <button 
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className="relative p-2 border border-white/5 hover:border-primary/20 text-on-surface-variant hover:text-primary hover:bg-primary/5 transition-all rounded cursor-pointer flex items-center justify-center"
+                  title="Notifications"
+                >
+                  <Bell className="w-4 h-4" />
+                  {user.notifications && user.notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-on-primary animate-pulse">
+                      {user.notifications.length}
+                    </span>
+                  )}
+                </button>
+                
+                {/* Floating Notifications Dropdown */}
+                {notificationsOpen && (
+                  <div className="absolute right-0 mt-2 w-80 max-h-96 bg-[#0e0e13]/98 border border-primary/20 rounded-xl shadow-2xl backdrop-blur-md overflow-y-auto z-50 text-left font-mono text-[11px] divide-y divide-white/5 animate-fade-in">
+                    <div className="p-3 bg-primary/5 flex justify-between items-center text-primary font-bold">
+                      <span className="text-[10px] tracking-wider uppercase">SYSTEM_ALERT_FEEDS</span>
+                      <button onClick={() => setNotificationsOpen(false)} className="text-on-surface-variant hover:text-white">✕</button>
+                    </div>
+                    <div className="p-2 space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                      {user.notifications.length === 0 ? (
+                        <div className="text-center py-6 text-on-surface-variant/45 text-[9px] uppercase">No active feeds</div>
+                      ) : (
+                        user.notifications.map((n) => (
+                          <div key={n.id} className="p-3 bg-white/5 rounded border border-white/5 space-y-2.5 text-[11px]">
+                            <p className="text-white leading-normal font-medium">{n.message || n.text}</p>
+                            <div className="flex gap-2 justify-end">
+                              {n.type === "friend_request" && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      acceptFriendRequest(n.from);
+                                      setNotificationsOpen(false);
+                                    }}
+                                    className="bg-secondary text-on-secondary px-2.5 py-1 rounded text-[9px] font-bold flex items-center gap-1 hover:brightness-110 cursor-pointer"
+                                  >
+                                    <Check className="w-2.5 h-2.5" /> ACCEPT
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      rejectFriendRequest(n.from);
+                                      setNotificationsOpen(false);
+                                    }}
+                                    className="border border-error/30 text-error hover:bg-error/10 px-2.5 py-1 rounded text-[9px] font-bold flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <X className="w-2.5 h-2.5" /> DECLINE
+                                  </button>
+                                </>
+                              )}
+                              {n.type === "room_invite" && (
+                                <>
+                                  <Link
+                                    to={`/battle/${n.data?.roomCode || n.roomId}`}
+                                    onClick={() => {
+                                      clearNotification(n.id);
+                                      setNotificationsOpen(false);
+                                    }}
+                                    className="bg-primary text-on-primary px-2.5 py-1 rounded text-[9px] font-bold flex items-center gap-1 hover:brightness-110 cursor-pointer text-center text-decoration-none"
+                                  >
+                                    <Swords className="w-2.5 h-2.5" /> JOIN LOBBY
+                                  </Link>
+                                  <button
+                                    onClick={() => clearNotification(n.id)}
+                                    className="border border-white/10 hover:bg-white/5 text-on-surface-variant px-2 py-1 rounded text-[9px] font-bold cursor-pointer"
+                                  >
+                                    DISMISS
+                                  </button>
+                                </>
+                              )}
+                              {n.type === "system" && (
+                                <button
+                                  onClick={() => clearNotification(n.id)}
+                                  className="border border-white/10 hover:bg-white/5 text-on-surface-variant px-2 py-1 rounded text-[8px] font-bold cursor-pointer"
+                                >
+                                  DISMISS
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Link to={`/profile/${user.username}`} className="flex items-center gap-2.5 group">
                 <div className="w-8 h-8 rounded border border-primary/50 bg-surface-container overflow-hidden p-0.5 group-hover:scale-105 group-hover:border-primary transition-all duration-300 shadow-[0_0_10px_rgba(221,183,255,0.2)]">
                   <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-contain" />
@@ -93,13 +182,103 @@ export default function Navbar() {
         </div>
 
         {/* Mobile menu toggle */}
-        <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden text-on-surface-variant hover:text-white transition-colors"
-          aria-label="Toggle menu"
-        >
-          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        <div className="flex items-center gap-2 md:hidden">
+          {user.isLoggedIn && (
+            <div className="relative">
+              <button 
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="relative p-2 border border-white/5 text-on-surface-variant hover:text-primary transition-all rounded flex items-center justify-center"
+              >
+                <Bell className="w-5 h-5" />
+                {user.notifications && user.notifications.length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-on-primary animate-pulse">
+                    {user.notifications.length}
+                  </span>
+                )}
+              </button>
+              
+              {/* Floating Notifications Dropdown Mobile */}
+              {notificationsOpen && (
+                <div className="absolute right-0 mt-3 w-72 max-h-80 bg-[#0e0e13]/98 border border-primary/20 rounded-xl shadow-2xl backdrop-blur-md overflow-y-auto z-50 text-left font-mono text-[10px] divide-y divide-white/5 animate-fade-in">
+                  <div className="p-2.5 bg-primary/5 flex justify-between items-center text-primary font-bold">
+                    <span className="text-[9px] tracking-wider uppercase">SYSTEM_ALERT_FEEDS</span>
+                    <button onClick={() => setNotificationsOpen(false)} className="text-on-surface-variant">✕</button>
+                  </div>
+                  <div className="p-2 space-y-2 max-h-[240px] overflow-y-auto custom-scrollbar">
+                    {user.notifications.length === 0 ? (
+                      <div className="text-center py-6 text-on-surface-variant/45 text-[9px] uppercase">No active feeds</div>
+                    ) : (
+                      user.notifications.map((n) => (
+                        <div key={n.id} className="p-2.5 bg-white/5 rounded border border-white/5 space-y-2">
+                          <p className="text-white leading-normal">{n.message || n.text}</p>
+                          <div className="flex gap-1.5 justify-end">
+                            {n.type === "friend_request" && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    acceptFriendRequest(n.from);
+                                    setNotificationsOpen(false);
+                                  }}
+                                  className="bg-secondary text-on-secondary px-2.5 py-1 rounded text-[8px] font-bold cursor-pointer"
+                                >
+                                  ACCEPT
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    rejectFriendRequest(n.from);
+                                    setNotificationsOpen(false);
+                                  }}
+                                  className="border border-error/30 text-error px-2.5 py-1 rounded text-[8px] font-bold cursor-pointer"
+                                >
+                                  DECLINE
+                                </button>
+                              </>
+                            )}
+                            {n.type === "room_invite" && (
+                              <>
+                                <Link
+                                  to={`/battle/${n.data?.roomCode || n.roomId}`}
+                                  onClick={() => {
+                                    clearNotification(n.id);
+                                    setNotificationsOpen(false);
+                                  }}
+                                  className="bg-primary text-on-primary px-2.5 py-1 rounded text-[8px] font-bold cursor-pointer text-center text-decoration-none"
+                                >
+                                  JOIN
+                                </Link>
+                                <button
+                                  onClick={() => clearNotification(n.id)}
+                                  className="border border-white/10 text-on-surface-variant px-2.5 py-1 rounded text-[8px] cursor-pointer"
+                                >
+                                  DISMISS
+                                </button>
+                              </>
+                            )}
+                            {n.type === "system" && (
+                              <button
+                                onClick={() => clearNotification(n.id)}
+                                className="border border-white/10 text-on-surface-variant px-2.5 py-1 rounded text-[8px] cursor-pointer"
+                              >
+                                DISMISS
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="text-on-surface-variant hover:text-white transition-colors"
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Menu Drawer */}

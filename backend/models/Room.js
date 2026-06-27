@@ -48,8 +48,36 @@ const roomSchema = new mongoose.Schema(
       ref: "Problem",
       default: null,
     },
+    readyUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    invitedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    spectatorsAllowed: {
+      type: Boolean,
+      default: true,
+    },
+    // For backward compatibility with older database documents
+    hostId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   { timestamps: true }
 );
+
+roomSchema.pre("validate", function (next) {
+  if (!this.admin && this.hostId) {
+    this.admin = this.hostId;
+  }
+  next();
+});
 
 module.exports = mongoose.model("Room", roomSchema);
