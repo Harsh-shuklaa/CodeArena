@@ -80,4 +80,6 @@ roomSchema.pre("validate", function (next) {
   next();
 });
 
+roomSchema.index({ participants: 1, status: 1 });
+
 module.exports = mongoose.model("Room", roomSchema);

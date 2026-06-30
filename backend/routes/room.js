@@ -5,24 +5,30 @@ const User = require("../models/User");
 const Notification = require("../models/Notification");
 const Activity = require("../models/Activity");
 const { protect } = require("../middleware/auth");
+const rateLimit = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
+// Room creation rate limiter: Medium policy (30 reqs / min)
+const roomLimiter = rateLimit("medium");
+
 /**
- * Generate a unique room code of format CA-XXXX
+ * Generate a unique room code of format CA-XXXXX (5 digits)
+ * Includes a maximum attempt limit to prevent any infinite loops.
  */
 const generateUniqueRoomCode = async () => {
-  let isUnique = false;
-  let code = "";
-  while (!isUnique) {
-    const num = Math.floor(1000 + Math.random() * 9000);
-    code = `CA-${num}`;
-    const existing = await Room.findOne({ roomCode: code });
+  let attempts = 0;
+  while (attempts < 10) {
+    attempts++;
+    const num = Math.floor(10000 + Math.random() * 90000);
+    const code = `CA-${num}`;
+    const existing = await Room.findOne({ roomCode: code }).select("_id");
     if (!existing) {
-      isUnique = true;
+      return code;
     }
   }
-  return code;
+  // Fallback to timestamp digits if collisions occur
+  return `CA-${Date.now().toString().slice(-5)}`;
 };
 
 /**
@@ -30,7 +36,7 @@ const generateUniqueRoomCode = async () => {
  * @desc    Create a custom duel lobby
  * @access  Private
  */
-router.post("/create", protect, async (req, res) => {
+router.post("/create", protect, roomLimiter, async (req, res) => {
   try {
     const { difficulty, language } = req.body;
 
@@ -94,7 +100,7 @@ router.post("/create", protect, async (req, res) => {
  * @desc    Get total count of active/waiting lobbies
  * @access  Private
  */
-router.get("/count/active", protect, async (req, res) => {
+router.get("/count/active", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     const count = await Room.countDocuments({ status: "waiting" });
     res.json({ count });
@@ -109,7 +115,7 @@ router.get("/count/active", protect, async (req, res) => {
  * @desc    Get room information and status
  * @access  Private
  */
-router.get("/:roomCode", protect, async (req, res) => {
+router.get("/:roomCode", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     const room = await Room.findOne({ roomCode: req.params.roomCode })
       .populate("admin", "username avatarUrl elo")
@@ -133,7 +139,7 @@ router.get("/:roomCode", protect, async (req, res) => {
  * @desc    Join an existing lobby as participant
  * @access  Private
  */
-router.post("/join", protect, async (req, res) => {
+router.post("/join", protect, rateLimit("medium"), async (req, res) => {
   try {
     const { roomCode } = req.body;
 
@@ -143,7 +149,7 @@ router.post("/join", protect, async (req, res) => {
     }
 
     // Add user as participant if not already in it
-    if (!room.participants.includes(req.user._id)) {
+    if (!room.participants.some(p => p.toString() === req.user._id.toString())) {
       room.participants.push(req.user._id);
       room.invitedUsers = (room.invitedUsers || []).filter(id => id.toString() !== req.user._id.toString());
       await room.save();
@@ -165,7 +171,7 @@ router.post("/join", protect, async (req, res) => {
  * @desc    Invite a friend to join a room lobby (toggles to cancel if already invited)
  * @access  Private
  */
-router.post("/invite", protect, async (req, res) => {
+router.post("/invite", protect, rateLimit("medium"), async (req, res) => {
   try {
     const { roomCode, friendUsername } = req.body;
 

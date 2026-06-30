@@ -62,7 +62,7 @@ export default function Profile() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const targetUsername = username || user.username;
+      const targetUsername = username || user?.username;
       if (!targetUsername || targetUsername === "Guest_Coder") {
         setProfileUser({
           username: "Guest_Coder",
@@ -101,7 +101,7 @@ export default function Profile() {
     };
 
     fetchProfile();
-  }, [username, user]);
+  }, [username, user?.username]);
 
   useEffect(() => {
     if (user.username) {

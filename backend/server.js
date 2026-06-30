@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const helmet = require("helmet");
 const dotenv = require("dotenv");
 
 const { connectDB } = require("./config/db.js");
@@ -24,9 +25,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
+app.use(helmet()); // Secure HTTP headers
 app.use(cors({
   origin: ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
-  credentials: true
+  credentials: true,
+  exposedHeaders: ["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"]
 }));
 app.use(express.json());
 

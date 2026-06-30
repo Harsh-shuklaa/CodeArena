@@ -26,6 +26,8 @@ export default function Matchmaking() {
       return;
     }
 
+    let matchTimeout = null;
+
     // Join matchmaking queue
     socket.emit("joinQueue", { token: localStorage.getItem("codearena_token") });
 
@@ -33,7 +35,7 @@ export default function Matchmaking() {
     socket.on("match_found", (data) => {
       const { roomCode } = data;
       setIsSearching(false);
-      setTimeout(() => {
+      matchTimeout = setTimeout(() => {
         navigate(`/battle/${roomCode}`);
       }, 1500);
     });
@@ -41,7 +43,7 @@ export default function Matchmaking() {
     socket.on("matchFound", (data) => {
       const { matchId } = data;
       setIsSearching(false);
-      setTimeout(() => {
+      matchTimeout = setTimeout(() => {
         navigate(`/battle/${matchId}`);
       }, 1500);
     });
@@ -50,6 +52,9 @@ export default function Matchmaking() {
       socket.off("match_found");
       socket.off("matchFound");
       socket.emit("leaveQueue");
+      if (matchTimeout) {
+        clearTimeout(matchTimeout);
+      }
     };
   }, [socket, navigate]);
 

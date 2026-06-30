@@ -1,5 +1,6 @@
 const express = require("express");
 const Problem = require("../models/Problem");
+const rateLimit = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
  * @desc    Get a random problem, optionally filtered by difficulty
  * @access  Public
  */
-router.get("/random", async (req, res) => {
+router.get("/random", rateLimit("relaxed"), async (req, res) => {
   try {
     const { difficulty } = req.query;
     
@@ -37,7 +38,7 @@ router.get("/random", async (req, res) => {
  * @desc    Add a new challenge
  * @access  Public
  */
-router.post("/add", async (req, res) => {
+router.post("/add", rateLimit("secure"), async (req, res) => {
   try {
     const { title, difficulty, statement, constraints, sampleInput, sampleOutput, testcases } = req.body;
 

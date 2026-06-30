@@ -1,6 +1,7 @@
 const express = require("express");
 const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
+const rateLimit = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
@@ -9,10 +10,11 @@ const router = express.Router();
  * @desc    Get current user's notifications
  * @access  Private
  */
-router.get("/", protect, async (req, res) => {
+router.get("/", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     const notifications = await Notification.find({ userId: req.user._id })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(50);
 
     // Format for easier frontend usage
     const formatted = notifications.map((n) => ({
@@ -40,7 +42,7 @@ router.get("/", protect, async (req, res) => {
  * @desc    Mark a notification as read
  * @access  Private
  */
-router.put("/:id/read", protect, async (req, res) => {
+router.put("/:id/read", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
@@ -64,7 +66,7 @@ router.put("/:id/read", protect, async (req, res) => {
  * @desc    Delete a notification
  * @access  Private
  */
-router.delete("/:id", protect, async (req, res) => {
+router.delete("/:id", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     const notification = await Notification.findOneAndDelete({
       _id: req.params.id,

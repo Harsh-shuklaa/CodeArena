@@ -1,6 +1,6 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import Editor from "@monaco-editor/react";
+import CodeEditor from "../components/CodeEditor";
 import { HelpCircle, CheckCircle2, RotateCw } from "lucide-react";
 import { UserContext } from "../context/UserContext";
 import BackgroundShader from "../components/BackgroundShader";
@@ -44,7 +44,7 @@ const decryptStream = (stream, k) => {
   const [participants, setParticipants] = useState([]);
   const [hostId, setHostId] = useState(null);
   const [roomError, setRoomError] = useState(null);
-  const [prevParticipants, setPrevParticipants] = useState([]);
+  const prevParticipantsRef = useRef([]);
   const [readyUsers, setReadyUsers] = useState([]);
   const [spectatorsAllowed, setSpectatorsAllowed] = useState(true);
   const [chatMessages, setChatMessages] = useState([]);
@@ -299,7 +299,7 @@ const decryptStream = (stream, k) => {
 
     // Battle ended
     socket.on("battleEnded", (data) => {
-      const { winnerId } = data;
+      const { winnerId, dbMatchId } = data;
       setBattleStarted(false);
       setTerminalOutput((prev) => [
         ...prev,
@@ -307,7 +307,7 @@ const decryptStream = (stream, k) => {
       ]);
 
       setTimeout(() => {
-        navigate(`/result/${matchId}`);
+        navigate(`/result/${dbMatchId || matchId}`);
       }, 2000);
     });
 
@@ -379,6 +379,7 @@ const decryptStream = (stream, k) => {
 
   // Terminal logs: Monitor participants presence change in real-time
   useEffect(() => {
+    const prevParticipants = prevParticipantsRef.current;
     if (participants.length > 0 && prevParticipants.length > 0) {
       const joined = participants.find(p => !prevParticipants.some(prev => prev._id === p._id));
       if (joined) {
@@ -395,8 +396,8 @@ const decryptStream = (stream, k) => {
         ]);
       }
     }
-    setPrevParticipants(participants);
-  }, [participants, prevParticipants]);
+    prevParticipantsRef.current = participants;
+  }, [participants]);
 
   // Match Timer Effect
   useEffect(() => {
@@ -552,7 +553,7 @@ const decryptStream = (stream, k) => {
   const isMeAdmin = hostIdStr === user._id?.toString();
 
   return (
-    <div className="pt-20 min-h-screen relative flex flex-col bg-[#0e0e13] overflow-hidden">
+    <div className={`pt-20 ${battleStarted ? "h-screen" : "min-h-screen"} relative flex flex-col bg-[#0e0e13] overflow-hidden`}>
       <BackgroundShader />
       <div className="fixed inset-0 z-[-2] grid-bg opacity-30 pointer-events-none"></div>
 
@@ -1319,7 +1320,7 @@ const decryptStream = (stream, k) => {
           </div>
 
           {/* Split Editor Arena */}
-          <div className="flex-grow flex overflow-hidden min-h-[500px]">
+          <div className="flex-grow flex-shrink flex overflow-hidden min-h-0">
             
             {/* Left panel: Problem Description */}
             <div className="w-1/3 glass-panel h-full flex flex-col border-y-0 border-l-0 shrink-0 text-left">
@@ -1410,21 +1411,12 @@ const decryptStream = (stream, k) => {
               </div>
 
               {/* Monaco Container*/}
-              <div className="flex-grow w-full relative">
+              <div className="flex-grow w-full relative min-h-0">
               <div className="scanner-effect absolute inset-x-0 top-0 h-1 z-20 pointer-events-none"></div>
-                <Editor
-                  height="100%"
-                  language={selectedLanguage.includes("PYTHON") ? "python" : selectedLanguage.includes("RUST") ? "rust" : selectedLanguage.includes("C++") ? "cpp" : selectedLanguage.includes("Java") ? "java" : selectedLanguage.includes("C") ? "c": selectedLanguage.includes("C++") ? "c"   : "javascript"}
-                  theme="vs-dark"
-                  value={code}
+                <CodeEditor
+                  code={code}
                   onChange={handleEditorChange}
-                  options={{
-                    fontFamily: "JetBrains Mono, monospace",
-                    fontSize: 14,
-                    minimap: { enabled: false },
-                    scrollbar: { verticalScrollbarSize: 4, horizontalScrollbarSize: 4 },
-                    padding: { top: 16, bottom: 16 },
-                  }}
+                  language={selectedLanguage}
                 />
                  {/* Floating Terminal Output*/ }
                 <div className="absolute bottom-6 right-6 w-64 glass-panel p-4 border border-primary/20 rounded-xl z-20 font-mono text-[11px]">
@@ -1466,14 +1458,16 @@ const decryptStream = (stream, k) => {
       )}
 
       {/* Footer */}
-      <footer className="flex flex-col items-center gap-4 w-full py-8 bg-surface-container-highest/40 border-t border-white/5 z-20 text-center font-mono text-[11px] text-on-surface-variant mt-auto">
-        <div className="flex gap-6 opacity-80 justify-center">
-          <a className="hover:text-secondary transition-colors" href="#">Privacy Protocol</a>
-          <a className="hover:text-secondary transition-colors" href="#">Terms of Engagement</a>
-          <a className="hover:text-secondary transition-colors" href="#">API Docs</a>
-        </div>
-        <p className="opacity-60">© 2026 CODEARENA. SYSTEMS ONLINE.</p>
-      </footer>
+      {!battleStarted && (
+        <footer className="flex flex-col items-center gap-4 w-full py-8 bg-surface-container-highest/40 border-t border-white/5 z-20 text-center font-mono text-[11px] text-on-surface-variant mt-auto">
+          <div className="flex gap-6 opacity-80 justify-center">
+            <a className="hover:text-secondary transition-colors" href="#">Privacy Protocol</a>
+            <a className="hover:text-secondary transition-colors" href="#">Terms of Engagement</a>
+            <a className="hover:text-secondary transition-colors" href="#">API Docs</a>
+          </div>
+          <p className="opacity-60">© 2026 CODEARENA. SYSTEMS ONLINE.</p>
+        </footer>
+      )}
     </div>
   );
 }

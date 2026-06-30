@@ -6,20 +6,30 @@ const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
 const Submission = require("../models/Submission");
 const Activity = require("../models/Activity");
+const rateLimit = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
-/**
- * @route   GET /api/user/leaderboard
- * @desc    Get top users sorted by ELO rating
- * @access  Public
- */
-router.get("/leaderboard", async (req, res) => {
+// Simple in-memory leaderboard cache to protect MongoDB from query spikes
+let cachedLeaderboard = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 10 * 1000; // 10 seconds TTL
+
+router.get("/leaderboard", rateLimit("relaxed"), async (req, res) => {
   try {
+    const now = Date.now();
+    if (cachedLeaderboard && (now - lastCacheTime < CACHE_TTL_MS)) {
+      return res.json(cachedLeaderboard);
+    }
+
     const users = await User.find({})
       .sort({ elo: -1 })
       .limit(30)
       .select("username elo avatarUrl selectedClass wins losses level");
+
+    cachedLeaderboard = users;
+    lastCacheTime = now;
+
     res.json(users);
   } catch (error) {
     console.error("[USER LEADERBOARD ERROR]", error);
@@ -32,11 +42,11 @@ router.get("/leaderboard", async (req, res) => {
  * @desc    Search registered users by username
  * @access  Private
  */
-router.get("/search", protect, async (req, res) => {
+router.get("/search", protect, rateLimit("medium"), async (req, res) => {
   try {
     const { username } = req.query;
-    if (!username) {
-      return res.json([]);
+    if (!username || username.trim().length < 3) {
+      return res.status(400).json({ message: "Search query must be at least 3 characters long." });
     }
     const users = await User.find({
       username: { $regex: username, $options: "i" },
@@ -56,7 +66,7 @@ router.get("/search", protect, async (req, res) => {
  * @desc    Get logged in user's friends list
  * @access  Private
  */
-router.get("/friends/list", protect, async (req, res) => {
+router.get("/friends/list", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate("friends", "username avatarUrl elo status wins losses level selectedClass");
     if (!user) {
@@ -74,7 +84,7 @@ router.get("/friends/list", protect, async (req, res) => {
  * @desc    Send a friend request to another user
  * @access  Private
  */
-router.post("/friend-request/send", protect, async (req, res) => {
+router.post("/friend-request/send", protect, rateLimit("medium"), async (req, res) => {
   try {
     const { username } = req.body;
     if (!username) {
@@ -159,7 +169,7 @@ router.post("/friend-request/send", protect, async (req, res) => {
  * @desc    Accept or reject a friend request
  * @access  Private
  */
-router.post("/friend-request/respond", protect, async (req, res) => {
+router.post("/friend-request/respond", protect, rateLimit("medium"), async (req, res) => {
   try {
     const { requestId, senderUsername, action } = req.body; // action: 'accept' or 'reject'
     if (!action || (!requestId && !senderUsername)) {
@@ -170,7 +180,7 @@ router.post("/friend-request/respond", protect, async (req, res) => {
     if (requestId) {
       request = await FriendRequest.findById(requestId);
     } else if (senderUsername) {
-      const sender = await User.findOne({ username: senderUsername.trim() });
+      const sender = await User.findOne({ username: { $regex: new RegExp(`^${senderUsername.trim()}$`, "i") } });
       if (sender) {
         request = await FriendRequest.findOne({
           senderId: sender._id,
@@ -264,7 +274,7 @@ router.post("/friend-request/respond", protect, async (req, res) => {
  * @desc    Update user profile configurations (avatarUrl, selectedClass)
  * @access  Private
  */
-router.put("/profile/update", protect, async (req, res) => {
+router.put("/profile/update", protect, rateLimit("medium"), async (req, res) => {
   try {
     const { avatarUrl, selectedClass } = req.body;
     const updates = {};
@@ -284,7 +294,7 @@ router.put("/profile/update", protect, async (req, res) => {
  * @desc    Get user profile details & match history
  * @access  Public
  */
-router.get("/:username", async (req, res) => {
+router.get("/:username", rateLimit("relaxed"), async (req, res) => {
   try {
     const user = await User.findOne({
       username: { $regex: new RegExp(`^${req.params.username.trim()}$`, "i") }
@@ -296,11 +306,17 @@ router.get("/:username", async (req, res) => {
       return res.status(404).json({ message: "Operator not found" });
     }
 
-    // Fetch matches associated with this user
+    // Fetch matches associated with this user with pagination support (default limit: 10)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skipIdx = (page - 1) * limit;
+
     const matches = await Match.find({
       $or: [{ player1Id: user._id }, { player2Id: user._id }]
     })
       .sort({ createdAt: -1 })
+      .skip(skipIdx)
+      .limit(limit)
       .populate("player1Id", "username avatarUrl elo")
       .populate("player2Id", "username avatarUrl elo")
       .populate("problemId", "title difficulty");
@@ -328,8 +344,8 @@ router.get("/:username", async (req, res) => {
       };
     });
 
-    // Fetch submissions to calculate language preference
-    const submissions = await Submission.find({ userId: user._id });
+    // Fetch submissions to calculate language preference (Select only language field to prevent memory leaks)
+    const submissions = await Submission.find({ userId: user._id }).select("language");
     const languageCounts = {};
     submissions.forEach(s => {
       if (s.language) {
@@ -443,7 +459,7 @@ router.get("/:username", async (req, res) => {
  * @desc    Get user activity counts for past 365 days grouped by date
  * @access  Public
  */
-router.get("/:username/activity", async (req, res) => {
+router.get("/:username/activity", rateLimit("relaxed"), async (req, res) => {
   try {
     const user = await User.findOne({
       username: { $regex: new RegExp(`^${req.params.username.trim()}$`, "i") }

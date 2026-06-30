@@ -3,10 +3,14 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { protect } = require("../middleware/auth");
+const rateLimit = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
 const Activity = require("../models/Activity");
+
+// Auth rate limiter: Very Strict policy (5 reqs / min)
+const authLimiter = rateLimit("veryStrict");
 
 // Helper to generate JWT Token
 const generateToken = (id) => {
@@ -20,7 +24,7 @@ const generateToken = (id) => {
  * @desc    Register a new user
  * @access  Public
  */
-router.post("/signup", async (req, res) => {
+router.post("/signup", authLimiter, async (req, res) => {
   try {
     const { username, email, password, selectedClass, avatarUrl } = req.body;
 
@@ -90,7 +94,7 @@ router.post("/signup", async (req, res) => {
  * @desc    Authenticate user and get token
  * @access  Public
  */
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -140,7 +144,7 @@ router.post("/login", async (req, res) => {
  * @desc    Get current user profile
  * @access  Private
  */
-router.get("/me", protect, async (req, res) => {
+router.get("/me", protect, rateLimit("relaxed"), async (req, res) => {
   try {
     res.json({
       user: {

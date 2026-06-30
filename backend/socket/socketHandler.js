@@ -9,29 +9,34 @@ const Matchmaking = require("../models/Matchmaking");
 const Submission = require("../models/Submission");
 const Activity = require("../models/Activity");
 const { executeCode } = require("../services/judge0");
+const { socketRateLimiter } = require("../middleware/socketRateLimiter");
 const mongoose = require("mongoose");
 
-// Track active battle room details in memory: { matchId: { player1Socket, player2Socket, startTime, problem } }
+// Track active battle room details in memory: { matchId: { player1Socket, player2Socket, startTime, problem, timeouts, player1Code, player2Code } }
 const activeBattles = new Map();
 
-// Track online users mapping userId -> socketId
+// Track online users mapping: userId -> Set<socketId>
 const onlineUsers = new Map();
 
+// Track matchmaking queue in memory: [{ userId, user, socketId, joinedAt }]
+const matchmakingQueue = [];
+
 /**
- * Generate a unique room code of format CA-XXXX
+ * Generate a unique room code of format CA-XXXXX (5 digits)
+ * Includes a maximum attempt limit to prevent any infinite loops.
  */
 const generateUniqueRoomCode = async () => {
-  let isUnique = false;
-  let code = "";
-  while (!isUnique) {
-    const num = Math.floor(1000 + Math.random() * 9000);
-    code = `CA-${num}`;
-    const existing = await Room.findOne({ roomCode: code });
+  let attempts = 0;
+  while (attempts < 10) {
+    attempts++;
+    const num = Math.floor(10000 + Math.random() * 90000);
+    const code = `CA-${num}`;
+    const existing = await Room.findOne({ roomCode: code }).select("_id");
     if (!existing) {
-      isUnique = true;
+      return code;
     }
   }
-  return code;
+  return `CA-${Date.now().toString().slice(-5)}`;
 };
 
 /**
@@ -48,10 +53,12 @@ const verifyUserToken = async (token) => {
     return null;
   }
 };
-
 const handleSocketConnections = (io) => {
   io.on("connection", async (socket) => {
     console.log(`[SOCKET] Node connected: ${socket.id}`);
+
+    // Register rate limiting interceptor on incoming packets/events
+    socketRateLimiter(socket, () => {});
 
     // Authenticate connection immediately
     const token = socket.handshake.auth?.token;
@@ -61,24 +68,31 @@ const handleSocketConnections = (io) => {
       socket.user = user;
       console.log(`[SOCKET] Authenticated user ${user.username} for socket ${socket.id}`);
       
-      // Update status to online in database
-      await User.findByIdAndUpdate(user._id, { status: "online", lastSeen: new Date() });
+      const userIdStr = user._id.toString();
+      const wasOffline = !onlineUsers.has(userIdStr);
+
+      if (!onlineUsers.has(userIdStr)) {
+        onlineUsers.set(userIdStr, new Set());
+      }
+      onlineUsers.get(userIdStr).add(socket.id);
       
       // Join personal room for real-time target notifications
-      socket.join(user._id.toString());
+      socket.join(userIdStr);
 
-      // Store in onlineUsers map
-      onlineUsers.set(user._id.toString(), socket.id);
-
-      // Broadcast presence change to friends
-      const userWithFriends = await User.findById(user._id).select("friends");
-      if (userWithFriends && userWithFriends.friends) {
-        userWithFriends.friends.forEach((friendId) => {
-          io.to(friendId.toString()).emit("friendPresenceChange", {
-            userId: user._id.toString(),
-            status: "online",
+      if (wasOffline) {
+        // Update status to online in database only if first tab/connection
+        await User.findByIdAndUpdate(user._id, { status: "online", lastSeen: new Date() });
+        
+        // Broadcast presence change to friends
+        const userWithFriends = await User.findById(user._id).select("friends");
+        if (userWithFriends && userWithFriends.friends) {
+          userWithFriends.friends.forEach((friendId) => {
+            io.to(friendId.toString()).emit("friendPresenceChange", {
+              userId: userIdStr,
+              status: "online",
+            });
           });
-        });
+        }
       }
     } else {
       // Unauthenticated client connection - keep open for guest or reject
@@ -87,26 +101,31 @@ const handleSocketConnections = (io) => {
 
     socket.on("register-user", async (userId) => {
       if (userId) {
-        onlineUsers.set(userId.toString(), socket.id);
-        await User.findByIdAndUpdate(userId, { status: "online", lastSeen: new Date() });
-        console.log(`[SOCKET] Registered online user ${userId} to socket ${socket.id}`);
-        
-        // Broadcast presence change to friends
-        const userWithFriends = await User.findById(userId).select("friends");
-        if (userWithFriends && userWithFriends.friends) {
-          userWithFriends.friends.forEach((friendId) => {
-            io.to(friendId.toString()).emit("friendPresenceChange", {
-              userId: userId.toString(),
-              status: "online",
+        const userIdStr = userId.toString();
+        const wasOffline = !onlineUsers.has(userIdStr);
+
+        if (!onlineUsers.has(userIdStr)) {
+          onlineUsers.set(userIdStr, new Set());
+        }
+        onlineUsers.get(userIdStr).add(socket.id);
+
+        if (wasOffline) {
+          await User.findByIdAndUpdate(userId, { status: "online", lastSeen: new Date() });
+          console.log(`[SOCKET] Registered online user ${userId} to socket ${socket.id}`);
+          
+          // Broadcast presence change to friends
+          const userWithFriends = await User.findById(userId).select("friends");
+          if (userWithFriends && userWithFriends.friends) {
+            userWithFriends.friends.forEach((friendId) => {
+              io.to(friendId.toString()).emit("friendPresenceChange", {
+                userId: userIdStr,
+                status: "online",
+              });
             });
-          });
+          }
         }
       }
     });
-
-    // ==========================================
-    // 1. MATCHMAKING EVENTS (MongoDB-backed FCFS)
-    // ==========================================
 
     socket.on("joinQueue", async (data) => {
       console.log(`[MATCHMAKING DEBUG] joinQueue event received from user: ${socket.user?.username || "unknown"} (socket ID: ${socket.id})`);
@@ -119,8 +138,11 @@ const handleSocketConnections = (io) => {
         }
         socket.user = u; // ensure set
 
-        // Prevent duplicate entries
-        await Matchmaking.deleteOne({ userId: u._id });
+        // Prevent duplicate entries in memory queue
+        const existingIdx = matchmakingQueue.findIndex(item => item.userId === u._id.toString());
+        if (existingIdx !== -1) {
+          matchmakingQueue.splice(existingIdx, 1);
+        }
 
         // Scrub user from any waiting lobbies before entering queue
         const waitingRooms = await Room.find({ participants: u._id, status: "waiting" });
@@ -141,13 +163,15 @@ const handleSocketConnections = (io) => {
 
             io.to(r.roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
 
-            const populated = await Room.findOne({ roomCode: r.roomCode })
-              .populate("admin", "username avatarUrl elo status wins losses")
-              .populate("participants", "username avatarUrl elo status wins losses")
-              .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-              .populate("readyUsers", "username avatarUrl elo status wins losses")
-              .populate("invitedUsers", "username avatarUrl elo status wins losses")
-              .populate("problemId");
+            // Call populate directly on the saved room instance to save one findOne DB query round-trip
+            const populated = await r.populate([
+              { path: "admin", select: "username avatarUrl elo status wins losses" },
+              { path: "participants", select: "username avatarUrl elo status wins losses" },
+              { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+              { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+              { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+              { path: "problemId" }
+            ]);
 
             if (populated) {
               io.to(r.roomCode).emit("roomStatusUpdate", populated);
@@ -171,144 +195,121 @@ const handleSocketConnections = (io) => {
           return;
         }
 
-        console.log(`[MATCHMAKING] User ${u.username} entering MongoDB queue.`);
+        console.log(`[MATCHMAKING] User ${u.username} entering memory queue.`);
 
-        // Atomic Upsert to prevent duplicate key E11000 errors
-        await Matchmaking.findOneAndUpdate(
-          { userId: u._id },
-          { status: "waiting", joinedAt: new Date() },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+        // Insert into memory queue
+        matchmakingQueue.push({
+          userId: u._id.toString(),
+          user: u,
+          socketId: socket.id,
+          joinedAt: new Date()
+        });
 
         socket.emit("queueJoined", { message: "Searching for similar operators..." });
 
-        // Trigger First-Come-First-Serve Matchmaking Check
-        const waitingList = await Matchmaking.find({ status: "waiting" })
-          .sort({ joinedAt: 1 })
-          .populate("userId");
+        // Trigger First-Come-First-Serve Matchmaking Check in memory
+        if (matchmakingQueue.length >= 2) {
+          const player1 = matchmakingQueue.shift();
+          const player2 = matchmakingQueue.shift();
 
-        if (waitingList.length >= 2) {
-          const ids = [waitingList[0]._id, waitingList[1]._id];
+          console.log(`[MATCHMAKING] Pairing ${player1.user.username} vs ${player2.user.username}`);
 
-          // Lock these two players atomically to prevent duplicate pairing race conditions
-          const lockResult = await Matchmaking.updateMany(
-            { _id: { $in: ids }, status: "waiting" },
-            { $set: { status: "matching" } }
-          );
-
-          if (lockResult.modifiedCount === 2) {
-            const player1 = waitingList[0];
-            const player2 = waitingList[1];
-
-            console.log(`[MATCHMAKING] Pairing ${player1.userId.username} vs ${player2.userId.username}`);
-
-            // Remove queue entries
-            await Matchmaking.deleteMany({
-              userId: { $in: [player1.userId._id, player2.userId._id] }
+          // Fetch coding challenge
+          const count = await Problem.countDocuments();
+          let problem;
+          if (count > 0) {
+            const randomIdx = Math.floor(Math.random() * count);
+            problem = await Problem.findOne().skip(randomIdx);
+          } else {
+            problem = await Problem.create({
+              title: "Default Decryption Challenge",
+              difficulty: "Medium",
+              statement: "Reverse a string of packet payloads.",
+              testcases: [{ input: "hello", output: "olleh" }],
             });
-
-            // Fetch coding challenge
-            const count = await Problem.countDocuments();
-            let problem;
-            if (count > 0) {
-              const randomIdx = Math.floor(Math.random() * count);
-              problem = await Problem.findOne().skip(randomIdx);
-            } else {
-              problem = await Problem.create({
-                title: "Default Decryption Challenge",
-                difficulty: "Medium",
-                statement: "Reverse a string of packet payloads.",
-                testcases: [{ input: "hello", output: "olleh" }],
-              });
-            }
-
-            const roomCode = await generateUniqueRoomCode();
-
-            // Create active Room
-            const room = await Room.create({
-              roomCode,
-              admin: player1.userId._id,
-              participants: [player1.userId._id, player2.userId._id],
-              selectedOpponent: player2.userId._id,
-              roomType: "matchmaking",
-              status: "active",
-              problemId: problem._id,
-            });
-
-            // Create Match
-            const match = await Match.create({
-              player1Id: player1.userId._id,
-              player2Id: player2.userId._id,
-              problemId: problem._id,
-              status: "ongoing",
-              startTime: Date.now(),
-            });
-
-            // Log match activities
-            await Activity.create({ userId: player1.userId._id, type: "match" });
-            await Activity.create({ userId: player2.userId._id, type: "match" });
-
-            const p1Socket = onlineUsers.get(player1.userId._id.toString());
-            const p2Socket = onlineUsers.get(player2.userId._id.toString());
-
-            // In-memory active battle tracking
-            activeBattles.set(roomCode, {
-              matchId: roomCode,
-              dbMatchId: match._id.toString(),
-              admin: player1.userId,
-              player1Socket: p1Socket,
-              player2Socket: p2Socket,
-              startTime: Date.now(),
-              problem: problem,
-              timeouts: {},
-            });
-
-            // Emit match_found to both users
-            const matchData = {
-              roomCode,
-              matchId: match._id.toString(),
-              problem: {
-                title: problem.title,
-                difficulty: problem.difficulty,
-                statement: problem.statement,
-                constraints: problem.constraints,
-                sampleInput: problem.sampleInput,
-                sampleOutput: problem.sampleOutput,
-              }
-            };
-
-            if (p1Socket) {
-              io.to(p1Socket).emit("match_found", {
-                ...matchData,
-                opponent: {
-                  username: player2.userId.username,
-                  avatarUrl: player2.userId.avatarUrl,
-                  elo: player2.userId.elo,
-                  wins: player2.userId.wins,
-                  winRate: (player2.userId.wins + player2.userId.losses) > 0 
-                    ? Math.round((player2.userId.wins / (player2.userId.wins + player2.userId.losses)) * 100) 
-                    : 0,
-                  status: "online",
-                }
-              });
-            }
-
-            if (p2Socket) {
-              io.to(p2Socket).emit("match_found", {
-                ...matchData,
-                opponent: {
-                  username: player1.userId.username,
-                  avatarUrl: player1.userId.avatarUrl,
-                  elo: player1.userId.elo,
-                  wins: player1.userId.wins,
-                  winRate: (player1.userId.wins + player1.userId.losses) > 0 
-                    ? Math.round((player1.userId.wins / (player1.userId.wins + player1.userId.losses)) * 100) 
-                    : 0,
-                  status: "online",
-                }
-              });
-            }
           }
+
+          const roomCode = await generateUniqueRoomCode();
+
+          // Create active Room
+          const room = await Room.create({
+            roomCode,
+            admin: player1.user._id,
+            participants: [player1.user._id, player2.user._id],
+            selectedOpponent: player2.user._id,
+            roomType: "matchmaking",
+            status: "active",
+            problemId: problem._id,
+          });
+
+          // Create Match
+          const match = await Match.create({
+            player1Id: player1.user._id,
+            player2Id: player2.user._id,
+            problemId: problem._id,
+            status: "ongoing",
+            startTime: Date.now(),
+          });
+
+          // Log match activities
+          await Activity.create({ userId: player1.user._id, type: "match" });
+          await Activity.create({ userId: player2.user._id, type: "match" });
+
+          // In-memory active battle tracking
+          activeBattles.set(roomCode, {
+            matchId: roomCode,
+            dbMatchId: match._id.toString(),
+            admin: player1.user,
+            player1Socket: player1.socketId,
+            player2Socket: player2.socketId,
+            startTime: Date.now(),
+            problem: problem,
+            timeouts: {},
+            player1Code: "",
+            player2Code: "",
+          });
+
+          // Emit match_found to both users
+          const matchData = {
+            roomCode,
+            matchId: match._id.toString(),
+            problem: {
+              title: problem.title,
+              difficulty: problem.difficulty,
+              statement: problem.statement,
+              constraints: problem.constraints,
+              sampleInput: problem.sampleInput,
+              sampleOutput: problem.sampleOutput,
+            }
+          };
+
+          io.to(player1.userId).emit("match_found", {
+            ...matchData,
+            opponent: {
+              username: player2.user.username,
+              avatarUrl: player2.user.avatarUrl,
+              elo: player2.user.elo,
+              wins: player2.user.wins,
+              winRate: (player2.user.wins + player2.user.losses) > 0 
+                ? Math.round((player2.user.wins / (player2.user.wins + player2.user.losses)) * 100) 
+                : 0,
+              status: "online",
+            }
+          });
+
+          io.to(player2.userId).emit("match_found", {
+            ...matchData,
+            opponent: {
+              username: player1.user.username,
+              avatarUrl: player1.user.avatarUrl,
+              elo: player1.user.elo,
+              wins: player1.user.wins,
+              winRate: (player1.user.wins + player1.user.losses) > 0 
+                ? Math.round((player1.user.wins / (player1.user.wins + player1.user.losses)) * 100) 
+                : 0,
+              status: "online",
+            }
+          });
         }
       } catch (err) {
         console.error("[SOCKET joinQueue ERROR]", err);
@@ -319,7 +320,10 @@ const handleSocketConnections = (io) => {
     socket.on("leaveQueue", async () => {
       if (socket.user) {
         console.log(`[MATCHMAKING] User ${socket.user.username} left queue.`);
-        await Matchmaking.deleteOne({ userId: socket.user._id });
+        const idx = matchmakingQueue.findIndex(item => item.userId === socket.user._id.toString());
+        if (idx !== -1) {
+          matchmakingQueue.splice(idx, 1);
+        }
       }
     });
 
@@ -341,9 +345,26 @@ const handleSocketConnections = (io) => {
         socket.join(matchId);
         console.log(`[BATTLE] User ${u.username} joined socket room ${matchId}`);
 
+        // Clear forfeit timeout if it's currently running for this user
+        const roomState = activeBattles.get(matchId);
+        if (roomState) {
+          const userIdStr = u._id.toString();
+          if (roomState.timeouts && roomState.timeouts[userIdStr]) {
+            console.log(`[BATTLE] User ${u.username} reconnected. Clearing forfeit timer.`);
+            clearTimeout(roomState.timeouts[userIdStr]);
+            delete roomState.timeouts[userIdStr];
+            
+            // Broadcast reconnect to opponent in the room
+            socket.to(matchId).emit("opponentReconnected", { userId: userIdStr, username: u.username });
+          }
+        }
+
         // Sync with Room in MongoDB
         let dbRoom = await Room.findOne({ roomCode: matchId });
         if (dbRoom) {
+          // De-duplicate participants to prevent double rendering under any circumstance
+          dbRoom.participants = Array.from(new Set(dbRoom.participants.map(p => p.toString())));
+
           const hasJoined = dbRoom.participants.some(p => p.toString() === u._id.toString());
           
           // Reset ready status when re-entering/rejoining
@@ -356,14 +377,15 @@ const handleSocketConnections = (io) => {
           }
           await dbRoom.save();
 
-          // Populate room details
-          const populatedRoom = await Room.findOne({ roomCode: matchId })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("invitedUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          // Populate the saved document directly, saving one findOne query
+          const populatedRoom = await dbRoom.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           // Sync in-memory room mapping if active
           if (!activeBattles.has(matchId)) {
@@ -376,22 +398,27 @@ const handleSocketConnections = (io) => {
               status: "ongoing"
             });
 
+            const p1SocketSet = onlineUsers.get(populatedRoom.admin._id.toString());
+            const p2SocketSet = populatedRoom.selectedOpponent ? onlineUsers.get(populatedRoom.selectedOpponent._id.toString()) : null;
+
             activeBattles.set(matchId, {
               matchId,
               dbMatchId: activeMatch ? activeMatch._id.toString() : null,
               admin: populatedRoom.admin,
-              player1Socket: populatedRoom.admin._id.toString() === u._id.toString() ? socket.id : null,
-              player2Socket: populatedRoom.selectedOpponent && populatedRoom.selectedOpponent._id.toString() === u._id.toString() ? socket.id : null,
+              player1Socket: p1SocketSet && p1SocketSet.size > 0 ? Array.from(p1SocketSet)[0] : null,
+              player2Socket: p2SocketSet && p2SocketSet.size > 0 ? Array.from(p2SocketSet)[0] : null,
               startTime: activeMatch ? activeMatch.startTime : null,
               problem: populatedRoom.problemId,
               timeouts: {},
+              player1Code: "",
+              player2Code: "",
             });
           } else {
-            const roomState = activeBattles.get(matchId);
+            const state = activeBattles.get(matchId);
             if (populatedRoom.admin._id.toString() === u._id.toString()) {
-              roomState.player1Socket = socket.id;
+              state.player1Socket = socket.id;
             } else if (populatedRoom.selectedOpponent && populatedRoom.selectedOpponent._id.toString() === u._id.toString()) {
-              roomState.player2Socket = socket.id;
+              state.player2Socket = socket.id;
             }
           }
 
@@ -416,17 +443,23 @@ const handleSocketConnections = (io) => {
           room.selectedOpponent = opponentId || null;
           await room.save();
 
-          const populated = await Room.findOne({ roomCode })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          const populated = await room.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           // Update activeBattle state
           if (activeBattles.has(roomCode)) {
             const state = activeBattles.get(roomCode);
-            state.player2Socket = opponentId ? onlineUsers.get(opponentId.toString()) : null;
+            if (opponentId) {
+              const sockets = onlineUsers.get(opponentId.toString());
+              state.player2Socket = sockets && sockets.size > 0 ? Array.from(sockets)[0] : null;
+            } else {
+              state.player2Socket = null;
+            }
           }
 
           io.to(roomCode).emit("opponent_selected", { selectedOpponent: populated.selectedOpponent });
@@ -453,19 +486,17 @@ const handleSocketConnections = (io) => {
           }
           await room.save();
 
-          // Emit kicked notification directly to user
-          const kickedSocketId = onlineUsers.get(userIdToRemove);
-          if (kickedSocketId) {
-            io.to(kickedSocketId).emit("player_removed", { roomCode });
-          }
+          // Emit kicked notification directly to all tabs of user
+          io.to(userIdToRemove).emit("player_removed", { roomCode });
 
-          const populated = await Room.findOne({ roomCode })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("invitedUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          const populated = await room.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           io.to(roomCode).emit("roomStatusUpdate", populated);
         }
@@ -504,13 +535,14 @@ const handleSocketConnections = (io) => {
           // Notify other participants in the room
           io.to(roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
 
-          const populated = await Room.findOne({ roomCode })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("invitedUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          const populated = await room.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           if (populated) {
             io.to(roomCode).emit("roomStatusUpdate", populated);
@@ -540,13 +572,14 @@ const handleSocketConnections = (io) => {
           }
           await room.save();
 
-          const populated = await Room.findOne({ roomCode })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("invitedUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          const populated = await room.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           io.to(roomCode).emit("roomStatusUpdate", populated);
         }
@@ -570,13 +603,14 @@ const handleSocketConnections = (io) => {
           
           await room.save();
 
-          const populated = await Room.findOne({ roomCode })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("invitedUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          const populated = await room.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           io.to(roomCode).emit("roomStatusUpdate", populated);
         }
@@ -638,12 +672,9 @@ const handleSocketConnections = (io) => {
             room.participants = room.participants.filter(p => allowedIds.includes(p.toString()));
             room.readyUsers = room.readyUsers.filter(p => allowedIds.includes(p.toString()));
 
-            // Notify spectators they are removed
+            // Notify spectators they are removed (using room user ID to redirect all spectator tabs)
             spectators.forEach(specId => {
-              const specSocketId = onlineUsers.get(specId.toString());
-              if (specSocketId) {
-                io.to(specSocketId).emit("player_removed", { roomCode });
-              }
+              io.to(specId.toString()).emit("player_removed", { roomCode });
             });
           }
 
@@ -666,14 +697,23 @@ const handleSocketConnections = (io) => {
           await Activity.create({ userId: room.admin._id, type: "match" });
           await Activity.create({ userId: room.selectedOpponent._id, type: "match" });
 
+          const p1SocketSet = onlineUsers.get(room.admin._id.toString());
+          const p2SocketSet = onlineUsers.get(room.selectedOpponent._id.toString());
+
           // In-memory state tracking
           const state = activeBattles.get(roomCode) || { timeouts: {} };
           state.dbMatchId = match._id.toString();
           state.startTime = Date.now();
+          state.admin = room.admin;
+          state.player1Socket = p1SocketSet && p1SocketSet.size > 0 ? Array.from(p1SocketSet)[0] : null;
+          state.player2Socket = p2SocketSet && p2SocketSet.size > 0 ? Array.from(p2SocketSet)[0] : null;
+          state.problem = room.problemId;
+          state.player1Code = "";
+          state.player2Code = "";
           activeBattles.set(roomCode, state);
 
           // Wait 3 seconds countdown, then redirect to fight
-          setTimeout(async () => {
+          state.startTimeout = setTimeout(async () => {
             const prob = await Problem.findById(room.problemId);
             io.to(roomCode).emit("match_started", {
               matchId: roomCode,
@@ -695,6 +735,7 @@ const handleSocketConnections = (io) => {
               player1: room.admin,
               player2: room.selectedOpponent,
             });
+            delete state.startTimeout;
           }, 3000);
         }
       } catch (err) {
@@ -714,6 +755,24 @@ const handleSocketConnections = (io) => {
           room.status = "waiting";
           await room.save();
           io.to(roomCode).emit("match_cancelled");
+
+          // Clear startTimeout countdown and clean up pre-created DB records
+          const state = activeBattles.get(roomCode);
+          if (state) {
+            if (state.startTimeout) {
+              clearTimeout(state.startTimeout);
+              delete state.startTimeout;
+            }
+            if (state.dbMatchId) {
+              await Match.findByIdAndDelete(state.dbMatchId);
+              // Clean up the match log activity entries
+              await Activity.deleteMany({
+                userId: { $in: [room.admin, room.selectedOpponent] },
+                type: "match"
+              });
+            }
+            activeBattles.delete(roomCode);
+          }
         }
       } catch (err) {
         console.error("[CANCEL MATCH ERROR]", err);
@@ -775,13 +834,13 @@ const handleSocketConnections = (io) => {
         }
 
         const problem = match.problemId;
+        
+        // Execute testcases sequentially with early break to reduce server load and prevent Judge0 API fatigue
         let allPassed = true;
         let failResult = null;
 
-        for (let i = 0; i < problem.testcases.length; i++) {
-          const tc = problem.testcases[i];
+        for (const tc of problem.testcases) {
           const execRes = await executeCode(code, language, tc.input, tc.output);
-
           if (!execRes.success) {
             allPassed = false;
             failResult = execRes;
@@ -822,12 +881,14 @@ const handleSocketConnections = (io) => {
           
           if (isPlayer1) {
             match.player1Code = code;
+            match.player2Code = roomState ? (roomState.player2Code || match.player2Code) : match.player2Code;
             match.player1Verdict = "Accepted";
             match.player2Verdict = "Failed";
             match.eloChangePlayer1 = eloChangePlayer1;
             match.eloChangePlayer2 = eloChangePlayer2;
           } else {
             match.player2Code = code;
+            match.player1Code = roomState ? (roomState.player1Code || match.player1Code) : match.player1Code;
             match.player2Verdict = "Accepted";
             match.player1Verdict = "Failed";
             match.eloChangePlayer1 = eloChangePlayer1;
@@ -868,6 +929,7 @@ const handleSocketConnections = (io) => {
             duration: durationStr,
             eloChangePlayer1,
             eloChangePlayer2,
+            dbMatchId: match._id.toString(),
           });
 
           activeBattles.delete(matchId);
@@ -899,24 +961,19 @@ const handleSocketConnections = (io) => {
       }
     });
 
-    // Autosave listener
-    socket.on("autosaveCode", async (data) => {
+    // Autosave listener - cache drafts in activeBattles map in memory to avoid write storms
+    socket.on("autosaveCode", (data) => {
       const { matchId, code } = data || {};
       const u = socket.user;
       if (!u || !matchId) return;
 
       try {
         const roomState = activeBattles.get(matchId);
-        const dbId = roomState ? roomState.dbMatchId : null;
-        if (dbId && mongoose.Types.ObjectId.isValid(dbId)) {
-          const match = await Match.findById(dbId);
-          if (match && match.status === "ongoing") {
-            if (match.player1Id.toString() === u._id.toString()) {
-              match.player1Code = code;
-            } else if (match.player2Id.toString() === u._id.toString()) {
-              match.player2Code = code;
-            }
-            await match.save();
+        if (roomState) {
+          if (roomState.admin._id.toString() === u._id.toString()) {
+            roomState.player1Code = code;
+          } else {
+            roomState.player2Code = code;
           }
         }
       } catch (err) {
@@ -934,25 +991,36 @@ const handleSocketConnections = (io) => {
       const u = socket.user;
       if (!u) return;
 
-      // Clean up maps
-      onlineUsers.delete(u._id.toString());
+      const userIdStr = u._id.toString();
 
-      // Update MongoDB status
-      await User.findByIdAndUpdate(u._id, { status: "offline", lastSeen: new Date() });
+      // Clean up maps with multi-tab support
+      if (onlineUsers.has(userIdStr)) {
+        const socketSet = onlineUsers.get(userIdStr);
+        socketSet.delete(socket.id);
+        if (socketSet.size === 0) {
+          onlineUsers.delete(userIdStr);
 
-      // Broadcast offline status to friends
-      const userWithFriends = await User.findById(u._id).select("friends");
-      if (userWithFriends && userWithFriends.friends) {
-        userWithFriends.friends.forEach((friendId) => {
-          io.to(friendId.toString()).emit("friendPresenceChange", {
-            userId: u._id.toString(),
-            status: "offline",
-          });
-        });
+          // Update MongoDB status to offline only when last connection is closed
+          await User.findByIdAndUpdate(u._id, { status: "offline", lastSeen: new Date() });
+
+          // Broadcast offline status to friends
+          const userWithFriends = await User.findById(u._id).select("friends");
+          if (userWithFriends && userWithFriends.friends) {
+            userWithFriends.friends.forEach((friendId) => {
+              io.to(friendId.toString()).emit("friendPresenceChange", {
+                userId: userIdStr,
+                status: "offline",
+              });
+            });
+          }
+        }
       }
 
-      // Remove from matchmaking queue
-      await Matchmaking.deleteOne({ userId: u._id });
+      // Remove from matchmaking memory queue
+      const queueIdx = matchmakingQueue.findIndex(item => item.userId === userIdStr);
+      if (queueIdx !== -1) {
+        matchmakingQueue.splice(queueIdx, 1);
+      }
 
       // Check if lobby user disconnected (waiting status room)
       const waitingRooms = await Room.find({ participants: u._id, status: "waiting" });
@@ -975,13 +1043,15 @@ const handleSocketConnections = (io) => {
 
           io.to(r.roomCode).emit("player_left_lobby", { userId: u._id.toString(), username: u.username });
 
-          const populated = await Room.findOne({ roomCode: r.roomCode })
-            .populate("admin", "username avatarUrl elo status wins losses")
-            .populate("participants", "username avatarUrl elo status wins losses")
-            .populate("selectedOpponent", "username avatarUrl elo status wins losses")
-            .populate("readyUsers", "username avatarUrl elo status wins losses")
-            .populate("invitedUsers", "username avatarUrl elo status wins losses")
-            .populate("problemId");
+          // Call populate directly on the saved document to save query overhead
+          const populated = await r.populate([
+            { path: "admin", select: "username avatarUrl elo status wins losses" },
+            { path: "participants", select: "username avatarUrl elo status wins losses" },
+            { path: "selectedOpponent", select: "username avatarUrl elo status wins losses" },
+            { path: "readyUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "invitedUsers", select: "username avatarUrl elo status wins losses" },
+            { path: "problemId" }
+          ]);
 
           if (populated) {
             io.to(r.roomCode).emit("roomStatusUpdate", populated);
@@ -1024,6 +1094,8 @@ const handleSocketConnections = (io) => {
                 match.eloChangePlayer2 = eloChangePlayer2;
                 match.player1Verdict = isPlayer1 ? "Forfeit" : "Accepted";
                 match.player2Verdict = isPlayer1 ? "Accepted" : "Forfeit";
+                match.player1Code = roomState.player1Code || match.player1Code;
+                match.player2Code = roomState.player2Code || match.player2Code;
                 await match.save();
 
                 const winUser = await User.findById(winnerId);
@@ -1047,6 +1119,7 @@ const handleSocketConnections = (io) => {
                   duration: "Forfeit",
                   eloChangePlayer1,
                   eloChangePlayer2,
+                  dbMatchId: match._id.toString(),
                 });
               }
             } catch (err) {

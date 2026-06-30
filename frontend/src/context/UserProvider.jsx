@@ -337,8 +337,9 @@ export function UserProvider({ children }) {
 
       if (res.ok) {
         setUser((prev) => {
-          const cleanRequests = prev.friendRequests.filter(r => r.from !== fromUsername);
-          const isAlreadyFriend = prev.friends.some(f => f.username === fromUsername);
+          const targetLower = fromUsername.toLowerCase();
+          const cleanRequests = prev.friendRequests.filter(r => r.from?.toLowerCase() !== targetLower);
+          const isAlreadyFriend = prev.friends.some(f => f.username?.toLowerCase() === targetLower);
           const newFriends = isAlreadyFriend ? prev.friends : [...prev.friends, { username: fromUsername, status: "online" }];
           const systemAlert = {
             id: Math.random().toString(36).substring(7),
@@ -347,7 +348,7 @@ export function UserProvider({ children }) {
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           const cleanNotifications = prev.notifications.filter(
-            n => !((n.type === "friend_request" && (n.data?.senderUsername === fromUsername || n.from === fromUsername)))
+            n => !((n.type === "friend_request" && (n.data?.senderUsername?.toLowerCase() === targetLower || n.from?.toLowerCase() === targetLower)))
           );
           return {
             ...prev,
@@ -378,9 +379,10 @@ export function UserProvider({ children }) {
 
       if (res.ok) {
         setUser((prev) => {
-          const cleanRequests = prev.friendRequests.filter(r => r.from !== fromUsername);
+          const targetLower = fromUsername.toLowerCase();
+          const cleanRequests = prev.friendRequests.filter(r => r.from?.toLowerCase() !== targetLower);
           const cleanNotifications = prev.notifications.filter(
-            n => !((n.type === "friend_request" && (n.data?.senderUsername === fromUsername || n.from === fromUsername)))
+            n => !((n.type === "friend_request" && (n.data?.senderUsername?.toLowerCase() === targetLower || n.from?.toLowerCase() === targetLower)))
           );
           return {
             ...prev,
